@@ -97,3 +97,6 @@ couchdb.stdout
 
 cover/*
 INSTALL
+
+# for OS X
+.DS_Store
