@@ -155,7 +155,7 @@ test_regular_request() ->
 test_vhost_request() ->
     case ibrowse:send_req(server(), [], get, [], [{host_header, "example.com"}]) of
         {ok, _, _, Body} ->
-            {[{<<"db_name">>, <<"etap-test-db">>},_,_,_,_,_,_,_,_,_]}
+            {[{<<"db_name">>, <<"etap-test-db">>},_,_,_,_,_,_,_,_,_,_]}
                 = couch_util:json_decode(Body),
             etap:is(true, true, "should return database info");
         _Else ->
@@ -222,7 +222,7 @@ test_vhost_request_wildcard()->
 test_vhost_request_replace_var() ->
     case ibrowse:send_req(server(), [], get, [], [{host_header,"etap-test-db.example1.com"}]) of
         {ok, _, _, Body} ->
-            {[{<<"db_name">>, <<"etap-test-db">>},_,_,_,_,_,_,_,_,_]}
+            {[{<<"db_name">>, <<"etap-test-db">>},_,_,_,_,_,_,_,_,_,_]}
                 = couch_util:json_decode(Body),
             etap:is(true, true, "should return database info");
         _Else -> etap:is(false, true, <<"ibrowse fail">>)
@@ -242,7 +242,7 @@ test_vhost_request_replace_var1() ->
 test_vhost_request_replace_wildcard() ->
     case ibrowse:send_req(server(), [], get, [], [{host_header,"etap-test-db.example2.com"}]) of
         {ok, _, _, Body} ->
-            {[{<<"db_name">>, <<"etap-test-db">>},_,_,_,_,_,_,_,_,_]}
+            {[{<<"db_name">>, <<"etap-test-db">>},_,_,_,_,_,_,_,_,_,_]}
                 = couch_util:json_decode(Body),
             etap:is(true, true, "should return database info");
         _Else -> etap:is(false, true, <<"ibrowse fail">>)
@@ -252,7 +252,7 @@ test_vhost_request_path() ->
     Uri = server() ++ "test",
     case ibrowse:send_req(Uri, [], get, [], [{host_header, "example.com"}]) of
         {ok, _, _, Body} ->
-            {[{<<"db_name">>, <<"etap-test-db">>},_,_,_,_,_,_,_,_,_]}
+            {[{<<"db_name">>, <<"etap-test-db">>},_,_,_,_,_,_,_,_,_,_]}
                 = couch_util:json_decode(Body),
             etap:is(true, true, "should return database info");
         _Else -> etap:is(false, true, <<"ibrowse fail">>)
@@ -272,7 +272,7 @@ test_vhost_request_path2() ->
     Uri = server() ++ "test",
     case ibrowse:send_req(Uri, [], get, [], [{host_header,"etap-test-db.example2.com"}]) of
         {ok, _, _, Body} ->
-            {[{<<"db_name">>, <<"etap-test-db">>},_,_,_,_,_,_,_,_,_]}
+            {[{<<"db_name">>, <<"etap-test-db">>},_,_,_,_,_,_,_,_,_,_]}
                 = couch_util:json_decode(Body),
             etap:is(true, true, "should return database info");
         _Else -> etap:is(false, true, <<"ibrowse fail">>)

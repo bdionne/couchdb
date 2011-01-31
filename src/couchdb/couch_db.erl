@@ -254,11 +254,16 @@ get_db_info(Db) ->
         instance_start_time=StartTime,
         committed_update_seq=CommittedUpdateSeq} = Db,
     {ok, Size} = couch_file:bytes(Fd),
-    {ok, {Count, DelCount}} = couch_btree:full_reduce(by_id_btree(Db)),
+    {ok, {Count, DelCount, Conflicts}} =
+        case couch_btree:full_reduce(by_id_btree(Db)) of
+        {ok, {_,_,_}} = New -> New;
+        {ok, {C,D}} -> {ok, {C,D,0}}
+        end,
     InfoList = [
         {db_name, Name},
         {doc_count, Count},
         {doc_del_count, DelCount},
+        {conflicts_count, Conflicts},
         {update_seq, SeqNum},
         {purge_seq, couch_db:get_purge_seq(Db)},
         {compact_running, Compactor/=nil},
@@ -954,9 +959,12 @@ enum_docs_since_reduce_to_count(Reds) ->
             fun couch_db_updater:btree_by_seq_reduce/2, Reds).
 
 enum_docs_reduce_to_count(Reds) ->
-    {Count, _DelCount} = couch_btree:final_reduce(
-            fun couch_db_updater:btree_by_id_reduce/2, Reds),
-    Count.
+    case couch_btree:final_reduce(
+           fun couch_db_updater:btree_by_id_reduce/2, Reds) of
+    {C1, _DelCount} -> C1;
+    {C2, _DelCount, _Conflicts} ->
+        C2
+    end.
 
 changes_since(Db, Style, StartSeq, Fun, Acc) ->
     changes_since(Db, Style, StartSeq, Fun, [], Acc).

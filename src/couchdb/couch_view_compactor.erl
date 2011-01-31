@@ -41,7 +41,10 @@ compact_group(Group, EmptyGroup) ->
         views = EmptyViews
     } = EmptyGroup,
 
-    {ok, {Count, _}} = couch_btree:full_reduce(Db#db.fulldocinfo_by_id_btree),
+    Count = case couch_btree:full_reduce(Db#db.fulldocinfo_by_id_btree) of
+            {ok, {NC,_,_}} -> NC;
+            {ok, {OC,_}} -> OC
+            end,
 
     <<"_design", ShortName/binary>> = GroupId,
     DbName = couch_db:name(Db),

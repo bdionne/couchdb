@@ -326,16 +326,24 @@ btree_by_id_join(Id, {HighSeq, Deleted, DiskTree}) ->
 
 btree_by_id_reduce(reduce, FullDocInfos) ->
     lists:foldl(
-        fun(#full_doc_info{deleted = false}, {NotDeleted, Deleted}) ->
-                {NotDeleted + 1, Deleted};
-            (#full_doc_info{deleted = true}, {NotDeleted, Deleted}) ->
-                {NotDeleted, Deleted + 1}
+        fun(#full_doc_info{deleted = false, rev_tree=Tree},
+            {NotDeleted, Deleted, Conflicts}) ->
+                {NotDeleted + 1, Deleted, Conflicts +
+                case has_conflicts(Tree) of true -> 1; false -> 0 end};
+           (#full_doc_info{deleted = true, rev_tree=Tree},
+            {NotDeleted, Deleted, Conflicts}) ->
+                {NotDeleted, Deleted + 1, Conflicts +
+                case has_conflicts(Tree) of true -> 1; false -> 0 end}
         end,
-        {0, 0}, FullDocInfos);
+        {0, 0, 0}, FullDocInfos);
 btree_by_id_reduce(rereduce, [FirstRed | RestReds]) ->
     lists:foldl(
         fun({NotDeleted, Deleted}, {AccNotDeleted, AccDeleted}) ->
-            {AccNotDeleted + NotDeleted, AccDeleted + Deleted}
+            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, 0};
+           ({NotDeleted, Deleted}, {AccNotDeleted, AccDeleted, AccConflicts}) ->
+            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, AccConflicts};
+           ({NotDeleted, Deleted, Conflicts}, {AccNotDeleted, AccDeleted, AccConflicts}) ->
+            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, AccConflicts + Conflicts}
         end,
         FirstRed, RestReds).
 
@@ -868,3 +876,5 @@ start_copy_compact(#db{name=Name,filepath=Filepath,header=#db_header{purge_seq=P
     close_db(NewDb3),
     gen_server:cast(Db#db.update_pid, {compact_done, CompactFile}).
 
+has_conflicts(RevTree) ->
+    couch_key_tree:has_conflicts(RevTree).
