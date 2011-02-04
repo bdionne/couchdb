@@ -89,7 +89,7 @@ constructor(JSContext* cx, JSObject* obj, uintN argc, jsval* argv, jsval* rval)
         JS_ReportError(cx, "Failed to set private CouchHTTP data.");
         goto error;
     }
-    
+
     ret = JS_TRUE;
     goto success;
 
@@ -118,7 +118,7 @@ destructor(JSContext* cx, JSObject* obj)
 
 static JSBool
 open(JSContext* cx, JSObject* obj, uintN argc, jsval* argv, jsval* rval)
-{    
+{
     HTTPData* http = (HTTPData*) JS_GetPrivate(cx, obj);
     char* method = NULL;
     char* url = NULL;
@@ -143,12 +143,12 @@ open(JSContext* cx, JSObject* obj, uintN argc, jsval* argv, jsval* rval)
         JS_ReportError(cx, "Failed to encode method.");
         goto done;
     }
-    
+
     for(methid = 0; METHODS[methid] != NULL; methid++)
     {
         if(strcasecmp(METHODS[methid], method) == 0) break;
     }
-    
+
     if(methid > COPY)
     {
         JS_ReportError(cx, "Invalid method specified.");
@@ -175,19 +175,19 @@ open(JSContext* cx, JSObject* obj, uintN argc, jsval* argv, jsval* rval)
         JS_ReportError(cx, "Failed to encode URL.");
         goto done;
     }
-    
+
     if(argv[2] != JSVAL_VOID && argv[2] != JSVAL_FALSE)
     {
         JS_ReportError(cx, "Synchronous flag must be false if specified.");
         goto done;
     }
-    
+
     if(http->req_headers)
     {
         curl_slist_free_all(http->req_headers);
         http->req_headers = NULL;
     }
-    
+
     // Disable Expect: 100-continue
     http->req_headers = curl_slist_append(http->req_headers, "Expect:");
 
@@ -200,7 +200,7 @@ done:
 
 static JSBool
 setheader(JSContext* cx, JSObject* obj, uintN argc, jsval* argv, jsval* rval)
-{    
+{
     HTTPData* http = (HTTPData*) JS_GetPrivate(cx, obj);
     char* keystr = NULL;
     char* valstr = NULL;
@@ -226,20 +226,20 @@ setheader(JSContext* cx, JSObject* obj, uintN argc, jsval* argv, jsval* rval)
         JS_ReportError(cx, "Failed to encode header name.");
         goto done;
     }
-    
+
     if(argv[1] == JSVAL_VOID)
     {
         JS_ReportError(cx, "You must specify a header value.");
         goto done;
     }
-    
+
     valstr = enc_string(cx, argv[1], NULL);
     if(!valstr)
     {
         JS_ReportError(cx, "Failed to encode header value.");
         goto done;
     }
-    
+
     hdrlen = strlen(keystr) + strlen(valstr) + 3;
     hdrbuf = (char*) malloc(hdrlen * sizeof(char));
     if(!hdrbuf)
@@ -247,7 +247,7 @@ setheader(JSContext* cx, JSObject* obj, uintN argc, jsval* argv, jsval* rval)
         JS_ReportError(cx, "Failed to allocate header buffer.");
         goto done;
     }
-    
+
     snprintf(hdrbuf, hdrlen, "%s: %s", keystr, valstr);
     http->req_headers = curl_slist_append(http->req_headers, hdrbuf);
 
@@ -268,7 +268,7 @@ sendreq(JSContext* cx, JSObject* obj, uintN argc, jsval* argv, jsval* rval)
     char* body = NULL;
     size_t bodylen = 0;
     JSBool ret = JS_FALSE;
-    
+
     if(!http)
     {
         JS_ReportError(cx, "Invalid CouchHTTP instance.");
@@ -296,13 +296,13 @@ static JSBool
 status(JSContext* cx, JSObject* obj, jsval idval, jsval* vp)
 {
     HTTPData* http = (HTTPData*) JS_GetPrivate(cx, obj);
-    
+
     if(!http)
     {
         JS_ReportError(cx, "Invalid CouchHTTP instance.");
         return JS_FALSE;
     }
-    
+
     if(INT_FITS_IN_JSVAL(http->last_status))
     {
         *vp = INT_TO_JSVAL(http->last_status);
@@ -367,7 +367,7 @@ install_http(JSContext* cx, JSObject* glbl)
         fprintf(stderr, "Failed to initialize CouchHTTP class.\n");
         return NULL;
     }
-    
+
     return klass;
 }
 
@@ -405,10 +405,10 @@ go(JSContext* cx, JSObject* obj, HTTPData* http, char* body, size_t bodylen)
     JSString* jsbody;
     JSBool ret = JS_FALSE;
     jsval tmp;
-    
+
     state.cx = cx;
     state.http = http;
-    
+
     state.sendbuf = body;
     state.sendlen = bodylen;
     state.sent = 0;
@@ -432,7 +432,7 @@ go(JSContext* cx, JSObject* obj, HTTPData* http, char* body, size_t bodylen)
         curl_easy_setopt(HTTP_HANDLE, CURLOPT_USERAGENT,
                                             "CouchHTTP Client - Relax");
     }
-    
+
     if(!HTTP_HANDLE)
     {
         JS_ReportError(cx, "Failed to initialize cURL handle.");
@@ -449,7 +449,7 @@ go(JSContext* cx, JSObject* obj, HTTPData* http, char* body, size_t bodylen)
     curl_easy_setopt(HTTP_HANDLE, CURLOPT_NOBODY, 0);
     curl_easy_setopt(HTTP_HANDLE, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(HTTP_HANDLE, CURLOPT_UPLOAD, 0);
-    
+
     if(http->method == HEAD)
     {
         curl_easy_setopt(HTTP_HANDLE, CURLOPT_NOBODY, 1);
@@ -460,10 +460,10 @@ go(JSContext* cx, JSObject* obj, HTTPData* http, char* body, size_t bodylen)
         curl_easy_setopt(HTTP_HANDLE, CURLOPT_UPLOAD, 1);
         curl_easy_setopt(HTTP_HANDLE, CURLOPT_FOLLOWLOCATION, 0);
     }
-    
+
     if(body && bodylen)
     {
-        curl_easy_setopt(HTTP_HANDLE, CURLOPT_INFILESIZE, bodylen);        
+        curl_easy_setopt(HTTP_HANDLE, CURLOPT_INFILESIZE, bodylen);
     }
     else
     {
@@ -484,7 +484,7 @@ go(JSContext* cx, JSObject* obj, HTTPData* http, char* body, size_t bodylen)
         JS_ReportError(cx, "Failed to execute HTTP request: %s", ERRBUF);
         goto done;
     }
-    
+
     if(!state.resp_headers)
     {
         JS_ReportError(cx, "Failed to recieve HTTP headers.");
@@ -505,7 +505,7 @@ go(JSContext* cx, JSObject* obj, HTTPData* http, char* body, size_t bodylen)
         JS_ReportError(cx, "INTERNAL: Failed to set response headers.");
         goto done;
     }
-    
+
     if(state.recvbuf) // Is good enough?
     {
         state.recvbuf[state.read] = '\0';
@@ -529,7 +529,7 @@ go(JSContext* cx, JSObject* obj, HTTPData* http, char* body, size_t bodylen)
     {
         tmp = JS_GetEmptyStringValue(cx);
     }
-    
+
     if(!JS_DefineProperty(
         cx,
         obj,
@@ -543,7 +543,7 @@ go(JSContext* cx, JSObject* obj, HTTPData* http, char* body, size_t bodylen)
         JS_ReportError(cx, "INTERNAL: Failed to set responseText.");
         goto done;
     }
-    
+
     ret = JS_TRUE;
 
 done:
@@ -593,7 +593,7 @@ recv_header(void *ptr, size_t size, size_t nmem, void *data)
     JSString* hdr = NULL;
     jsuint hdrlen;
     jsval hdrval;
-    
+
     if(length > 7 && strncasecmp(header, "HTTP/1.", 7) == 0)
     {
         if(length < 12)
@@ -647,14 +647,14 @@ recv_body(void *ptr, size_t size, size_t nmem, void *data)
     CurlState* state = (CurlState*) data;
     size_t length = size * nmem;
     char* tmp = NULL;
-    
+
     if(!state->recvbuf)
     {
         state->recvlen = 4096;
         state->read = 0;
         state->recvbuf = JS_malloc(state->cx, state->recvlen);
     }
-    
+
     if(!state->recvbuf)
     {
         return CURLE_WRITE_ERROR;
@@ -665,7 +665,7 @@ recv_body(void *ptr, size_t size, size_t nmem, void *data)
     tmp = JS_realloc(state->cx, state->recvbuf, state->recvlen);
     if(!tmp) return CURLE_WRITE_ERROR;
     state->recvbuf = tmp;
-   
+
     memcpy(state->recvbuf + state->read, ptr, length);
     state->read += length;
     return length;
