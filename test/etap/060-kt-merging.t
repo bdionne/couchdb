@@ -15,7 +15,7 @@
 
 main(_) ->
     test_util:init_code_path(),
-    etap:plan(16),
+    etap:plan(19),
     case (catch test()) of
         ok ->
             etap:end_tests();
@@ -172,5 +172,26 @@ test() ->
       couch_key_tree:merge([Foo],Bar,10),
       "Merging trees with conflicts ought to behave."
     ),
+
+    FooBarReal = {1, {"foo",
+               {false,0,0},
+               [{"foo2",{false,0,0},[]},
+                {"foo3", {false,0,0}, [{"foo4",{false,0,0},[]}]}
+               ]}},
+
+    %% check FooBar, falls thru to default case of check deleted
+    etap:is(couch_key_tree:has_conflicts([FooBar]), true,
+            "FooBar does have conflicts in it"),
+    %% check FooBar as it would have real values
+    etap:is(couch_key_tree:has_conflicts([FooBarReal]), true,
+            "FooBarReal does have conflicts in it"),
+
+    FooBarReal2 = {1, {"foo",
+               {false,0,0},
+               [{"foo2",{true,0,0},[]},
+                {"foo3", {false,0,0}, [{"foo4",{false,0,0},[]}]}
+               ]}},
+    etap:is(couch_key_tree:has_conflicts([FooBarReal2]), false,
+            "FooBarReal2 does not have conflicts in it"),
 
     ok.

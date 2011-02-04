@@ -328,13 +328,13 @@ count_non_deleted([{_Pos, Tree} | RestTree], N) ->
     true -> N;
     false ->
         NextN = count_non_deleted_leaves([Tree],N),
-        count_non_deleted(RestTree, N + NextN)
+        count_non_deleted(RestTree, NextN)
     end.
 
 count_non_deleted_leaves([],N) ->
     N;
 count_non_deleted_leaves([{_Key, Value, []} | RestTree],N) ->
-    NextN = case check_deleted(Value) of true -> N + 1; false -> N end,
+    NextN = case check_deleted(Value) of false -> N + 1; true -> N end,
     case NextN > 1 of
     true -> NextN;
     false ->
