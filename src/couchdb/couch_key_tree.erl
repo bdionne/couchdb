@@ -49,7 +49,7 @@
 
 -export([merge/3, find_missing/2, get_key_leafs/2, get_full_key_paths/2, get/2]).
 -export([map/2, get_all_leafs/1, count_leafs/1, remove_leafs/2, has_conflicts/1,
-    get_all_leafs_full/1,stem/2,map_leafs/2]).
+    get_all_leafs_full/1,stem/2,map_leafs/2, foldl/2]).
 
 -include("couch_db.hrl").
 
@@ -405,6 +405,33 @@ stem(Trees, Limit) ->
             {NewTrees, _} = merge(TreeAcc, {PathPos + 1 - length(Path), SingleTree}),
             NewTrees
         end, [], Paths2).
+
+foldl(PathList,Fun) ->
+    foldl(PathList,Fun,[]).
+
+foldl([],_Fun,Acc) ->
+    Acc;
+
+foldl([{Pos, Branch} | Rest], Fun, Acc) ->
+    Acc1 = foldl_simple(Fun,Pos,[Branch],Acc),
+    foldl(Rest,Fun,Acc1).
+
+foldl_simple(Fun,Pos,[{Key, Value, []} | RestTree], Acc) ->
+    case Fun(Pos,Key,Value, Acc) of
+    {ok, Acc1} ->
+        foldl_simple(Fun, Pos, RestTree, Acc1 ++ Acc);
+    {stop, Acc1} ->
+        Acc1 ++ Acc
+    end;
+
+foldl_simple(Fun, Pos, [{Key, Value, SubTree} | RestTree], Acc) ->
+    Acc1 = foldl_simple(Fun, Pos + 1, SubTree, Acc),
+    case Fun(Pos,Key,Value,Acc1) of
+    {ok, Acc2} ->
+        foldl_simple(Fun, Pos, RestTree, Acc2 ++ Acc);
+    {stop, Acc2} ->
+        Acc2
+    end.
 
 % Tests moved to test/etap/06?-*.t
 
