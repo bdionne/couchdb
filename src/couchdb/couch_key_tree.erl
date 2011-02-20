@@ -419,16 +419,16 @@ foldl([{Pos, Branch} | Rest], Fun, Acc) ->
 foldl_simple(Fun,Pos,[{Key, Value, []} | RestTree], Acc) ->
     case Fun(Pos,Key,Value, Acc) of
     {ok, Acc1} ->
-        foldl_simple(Fun, Pos, RestTree, Acc1 ++ Acc);
+        foldl_simple(Fun, Pos, RestTree, Acc1);
     {stop, Acc1} ->
-        Acc1 ++ Acc
+        Acc1
     end;
 
 foldl_simple(Fun, Pos, [{Key, Value, SubTree} | RestTree], Acc) ->
     Acc1 = foldl_simple(Fun, Pos + 1, SubTree, Acc),
     case Fun(Pos,Key,Value,Acc1) of
     {ok, Acc2} ->
-        foldl_simple(Fun, Pos, RestTree, Acc2 ++ Acc);
+        foldl_simple(Fun, Pos, RestTree, Acc2);
     {stop, Acc2} ->
         Acc2
     end.
