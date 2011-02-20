@@ -300,18 +300,12 @@ get_all_leafs_simple(Pos, [{KeyId, Value, []} | RestTree], KeyPathAcc) ->
 get_all_leafs_simple(Pos, [{KeyId, _Value, SubTree} | RestTree], KeyPathAcc) ->
     get_all_leafs_simple(Pos + 1, SubTree, [KeyId | KeyPathAcc]) ++ get_all_leafs_simple(Pos, RestTree, KeyPathAcc).
 
-
-count_leafs([]) ->
-    0;
-count_leafs([{_Pos,Tree}|Rest]) ->
-    count_leafs_simple([Tree]) + count_leafs(Rest).
-
-count_leafs_simple([]) ->
-    0;
-count_leafs_simple([{_Key, _Value, []} | RestTree]) ->
-    1 + count_leafs_simple(RestTree);
-count_leafs_simple([{_Key, _Value, SubTree} | RestTree]) ->
-    count_leafs_simple(SubTree) + count_leafs_simple(RestTree).
+count_leafs(BranchList) ->
+    foldl(fun(_, leaf, Acc) ->
+              {ok, 1 + Acc};
+             (_, branch, Acc) ->
+              {ok, Acc}
+          end,0,BranchList).
 
 %% @doc check a revision tree for conflicts. By definition a tree has
 %% conflicts if there is more than one leaf that is not deleted
