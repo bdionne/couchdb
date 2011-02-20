@@ -49,7 +49,7 @@
 
 -export([merge/3, find_missing/2, get_key_leafs/2, get_full_key_paths/2, get/2]).
 -export([map/2, get_all_leafs/1, count_leafs/1, remove_leafs/2, has_conflicts/1,
-    get_all_leafs_full/1,stem/2,map_leafs/2, foldl/2]).
+    get_all_leafs_full/1,stem/2,map_leafs/2, foldl/3]).
 
 -include("couch_db.hrl").
 
@@ -315,39 +315,22 @@ count_leafs_simple([{_Key, _Value, SubTree} | RestTree]) ->
 
 %% @doc check a revision tree for conflicts. By definition a tree has
 %% conflicts if there is more than one leaf that is not deleted
-has_conflicts([]) ->
-    false;
 has_conflicts(BranchList) ->
-    count_non_deleted(BranchList,0) > 1.
-
-count_non_deleted([],N) ->
-    N;
-count_non_deleted([{_Pos, Tree} | RestTree], N) ->
-    % once there is more than one return
-    case N > 1 of
-    true -> N;
-    false ->
-        NextN = count_non_deleted_leaves([Tree],N),
-        count_non_deleted(RestTree, NextN)
-    end.
-
-count_non_deleted_leaves([],N) ->
-    N;
-count_non_deleted_leaves([{_Key, Value, []} | RestTree],N) ->
-    NextN = case check_deleted(Value) of false -> N + 1; true -> N end,
-    case NextN > 1 of
-    true -> NextN;
-    false ->
-            count_non_deleted_leaves(RestTree, NextN)
-    end;
-count_non_deleted_leaves([{_Key, _Value, SubTree} | RestTree],N) ->
-    NextN = count_non_deleted_leaves(SubTree,N),
-    case NextN > 1 of
-    true ->
-        NextN;
-    false ->
-        count_non_deleted_leaves(RestTree, NextN)
-    end.
+    foldl(fun({_Pos, _Key, Value},leaf,N) ->
+              NextN = case check_deleted(Value) of false -> N + 1; true -> N end,
+              case NextN > 1 of
+              true ->
+                  {stop, NextN};
+              false ->
+                  {ok, NextN}
+              end;
+             ({_Pos, _Key, _Value}, branch, N) ->
+              if N > 1 ->
+                  {stop, N};
+                 true ->
+                  {ok, N}
+              end
+          end,0,BranchList) > 1.
 
 check_deleted({true,_,_}) ->
     true;
@@ -406,18 +389,18 @@ stem(Trees, Limit) ->
             NewTrees
         end, [], Paths2).
 
-foldl(PathList,Fun) ->
-    foldl(PathList,Fun,[]).
-
-foldl([],_Fun,Acc) ->
+foldl(_Fun, Acc, []) ->
     Acc;
 
-foldl([{Pos, Branch} | Rest], Fun, Acc) ->
-    Acc1 = foldl_simple(Fun,Pos,[Branch],Acc),
-    foldl(Rest,Fun,Acc1).
+foldl(Fun, Acc, [{Pos, Branch} | Rest]) ->
+    Acc1 = foldl_simple(Fun, Pos, [Branch], Acc),
+    foldl(Fun, Acc1, Rest).
 
-foldl_simple(Fun,Pos,[{Key, Value, []} | RestTree], Acc) ->
-    case Fun(Pos,Key,Value, Acc) of
+foldl_simple(_Fun, _Pos, [], Acc) ->
+    Acc;
+
+foldl_simple(Fun, Pos, [{Key, Value, []} | RestTree], Acc) ->
+    case Fun({Pos, Key, Value}, leaf, Acc) of
     {ok, Acc1} ->
         foldl_simple(Fun, Pos, RestTree, Acc1);
     {stop, Acc1} ->
@@ -426,7 +409,7 @@ foldl_simple(Fun,Pos,[{Key, Value, []} | RestTree], Acc) ->
 
 foldl_simple(Fun, Pos, [{Key, Value, SubTree} | RestTree], Acc) ->
     Acc1 = foldl_simple(Fun, Pos + 1, SubTree, Acc),
-    case Fun(Pos,Key,Value,Acc1) of
+    case Fun({Pos, Key, Value}, branch, Acc1) of
     {ok, Acc2} ->
         foldl_simple(Fun, Pos, RestTree, Acc2);
     {stop, Acc2} ->
