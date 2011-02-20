@@ -49,7 +49,7 @@
 
 -export([merge/3, find_missing/2, get_key_leafs/2, get_full_key_paths/2, get/2]).
 -export([map/2, get_all_leafs/1, count_leafs/1, remove_leafs/2, has_conflicts/1,
-    get_all_leafs_full/1,stem/2,map_leafs/2, foldl/3]).
+    get_all_leafs_full/1,stem/2,map_leafs/2, foldl/3, foldr/3]).
 
 -include("couch_db.hrl").
 
@@ -271,27 +271,21 @@ get_full_key_paths(Pos, [{KeyId, Value, SubTree} | RestTree], KeysToGet, KeyPath
     {CurrentNodeResult ++ KeysGotten ++ KeysGotten2, KeysRemaining2}.
 
 get_all_leafs_full(Tree) ->
-    get_all_leafs_full(Tree, []).
-
-get_all_leafs_full([], Acc) ->
-    Acc;
-get_all_leafs_full([{Pos, Tree} | Rest], Acc) ->
-    get_all_leafs_full(Rest, get_all_leafs_full_simple(Pos, [Tree], []) ++ Acc).
-
-get_all_leafs_full_simple(_Pos, [], _KeyPathAcc) ->
-    [];
-get_all_leafs_full_simple(Pos, [{KeyId, Value, []} | RestTree], KeyPathAcc) ->
-    [{Pos, [{KeyId, Value} | KeyPathAcc]} | get_all_leafs_full_simple(Pos, RestTree, KeyPathAcc)];
-get_all_leafs_full_simple(Pos, [{KeyId, Value, SubTree} | RestTree], KeyPathAcc) ->
-    get_all_leafs_full_simple(Pos + 1, SubTree, [{KeyId, Value} | KeyPathAcc]) ++ get_all_leafs_full_simple(Pos, RestTree, KeyPathAcc).
+    foldr(fun({Pos, Key, Val}, leaf, Acc) ->
+              {ok, {Pos, [{Key, Val} | Acc]}};
+             ({_Pos, Key, Val}, branch, Acc) ->
+              {ok, [{Key, Val} | Acc]}
+          end,[],Tree).
 
 get_all_leafs(Trees) ->
     get_all_leafs(Trees, []).
 
-get_all_leafs([], Acc) ->
-    Acc;
-get_all_leafs([{Pos, Tree}|Rest], Acc) ->
-    get_all_leafs(Rest, get_all_leafs_simple(Pos, [Tree], []) ++ Acc).
+get_all_leafs(Trees,Acc0) ->
+    foldr(fun({Pos, Key, Val}, leaf, Acc) ->
+              {ok, {Val, {Pos, [Key | Acc]}}};
+             ({_Pos, Key, _Val}, branch, Acc) ->
+              {ok, [Key | Acc]}
+          end, Acc0, Trees).
 
 get_all_leafs_simple(_Pos, [], _KeyPathAcc) ->
     [];
@@ -408,6 +402,33 @@ foldl_simple(Fun, Pos, [{Key, Value, SubTree} | RestTree], Acc) ->
         foldl_simple(Fun, Pos, RestTree, Acc2);
     {stop, Acc2} ->
         Acc2
+    end.
+
+foldr(_Fun, Acc, []) ->
+    Acc;
+
+foldr(Fun, Acc, [{Pos, Branch} | Rest]) ->
+    Acc1 = foldr_simple(Fun, Pos, [Branch], []),
+    foldr(Fun, Acc1 ++ Acc, Rest).
+
+foldr_simple(_Fun, _Pos, [], _Acc) ->
+    [];
+
+foldr_simple(Fun, Pos, [{Key, Value, []} | RestTree], Acc) ->
+    case Fun({Pos, Key, Value}, leaf, Acc) of
+    {ok, Acc1} ->
+        [Acc1 | foldr_simple(Fun, Pos, RestTree, Acc)];
+    {stop, Acc1} ->
+        Acc1
+    end;
+
+foldr_simple(Fun, Pos, [{Key, Value, SubTree} | RestTree], Acc) ->
+    case Fun({Pos, Key, Value}, branch, Acc) of
+    {ok, Acc1} ->
+        foldr_simple(Fun, Pos + 1, SubTree, Acc1) ++
+        foldr_simple(Fun, Pos, RestTree, Acc);
+    {stop, Acc1} ->
+        Acc1
     end.
 
 % Tests moved to test/etap/06?-*.t
