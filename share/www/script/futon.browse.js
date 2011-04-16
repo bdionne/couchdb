@@ -438,6 +438,20 @@
         }
       }
 
+      this.populateFilterMenu = function() {
+        var select = $("#filter select");
+          db.querySlots({
+          success: function(resp) {
+            select[0].options.length = 1;
+	      resp.rows.sort();
+            for (var i = 0; i < resp.rows.length; i++) {
+		$(document.createElement("option")).attr("value",resp.rows[i]).text(resp.rows[i]).appendTo(select);
+            }
+          }
+        });
+        
+      }
+
       this.revertViewChanges = function(callback) {
         if (!page.storedViewCode) {
           var viewNameParts = viewName.split("/");

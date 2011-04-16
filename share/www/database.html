@@ -89,6 +89,7 @@ specific language governing permissions and limitations under the License.
         $("#staleviews :checkbox")[0].checked = staleViews;
 
         page.populateViewsMenu();
+        page.populateFilterMenu();
         page.populateViewEditor();
         if (page.isTempView) {
           $("#viewcode").show().removeClass("collapsed").find("textarea")[0].focus();
@@ -129,7 +130,27 @@ specific language governing permissions and limitations under the License.
         $("#toolbar button.delete").click(page.deleteDatabase);
         $("#toolbar button.security").click(page.databaseSecurity);
 
-        $('#jumpto input').suggest(function(text, callback) {
+        $('#search input').suggest(function(text, callback) {
+          // this is a total fucking hack. I know nothing about JS and less about
+          // jquery.suggest. I build a map of preferred names to ids so I can have suggest
+          // display preferred name and use id to look up the selected concept
+          //alert("foo " + $("#filter select").val());
+          var map = [];
+          var slot = $("#filter select").val();
+          
+          findId = function(pref_name) {
+             
+             for (var j = 0; j < map.length; j++) {
+                if (map[j][$("#filter select").val()] == pref_name) {
+                   if (slot == "id") {
+                     return map[j].id;
+                   } else {
+                     return map[j]._id;
+                   }
+                }
+             }
+          };
+          if (slot == "id") {
           page.db.allDocs({
             limit: 10, startkey: text, endkey: text + 'zzz',
             success: function(docs) {
@@ -137,16 +158,33 @@ specific language governing permissions and limitations under the License.
               for (var i = 0; i < docs.rows.length; i++) {
                 if (docs.rows[i].id.indexOf(text) == 0) {
                   matches[i] = docs.rows[i].id;
+                  map[i] = docs.rows[i];
                 }
               }
               callback(matches);
             }
           });
+          } else {
+          page.db.searchDocs({
+            word: text,
+            field: slot,
+            success: function(docs) {
+              var matches = [];
+              
+              for (var i = 0; i < docs.rows.length; i++) {
+                  matches[i] = docs.rows[i][$("#filter select").val()];
+                  map[i] = docs.rows[i];
+              }
+              callback(matches);
+            }
+          });
+          }
         }).keypress(function(e) {
           if (e.keyCode == 13) {
-            page.jumpToDocument($(this).val());
+            page.jumpToDocument(findId($(this).val()));
           }
         });
+
       });
     </script>
   </head>
@@ -170,11 +208,16 @@ specific language governing permissions and limitations under the License.
           <option value="_temp_view">Temporary view…</option>
         </select></label>
       </div>
-      <div id="jumpto">
-        <label>Jump to:
-          <input type="text" name="docid" placeholder="Document ID" autocomplete="off" />
-        </label>
+       <div id="filter">
+	 <label>Filter By: <select autocomplete="false">
+          <option value="id">ID</option>
+        </select></label>        
       </div>
+       <div id="search">
+        <label>Search For:
+          <input type="text" name="docid" autocomplete="off" />
+        </label>
+      </div>      
       <ul id="toolbar">
         <li><button class="add">New Document</button></li>
         <li><button class="security">Security…</button></li>

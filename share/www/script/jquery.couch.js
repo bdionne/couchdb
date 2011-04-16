@@ -511,11 +511,28 @@
           );
         },
 
+        searchDocs: function(options) {
+          ajax(
+            {url: this.uri + "_index_query" + encodeOptions(options)},
+            options,
+            "An error occurred retrieving a list of all documents"
+          );
+        },
+	querySlots: function(options) {
+          ajax(
+            {url: this.uri + "_index_slots" + encodeOptions(options)},
+            options,
+            "An error occurred retrieving a list of all documents"
+          );
+        },
+
+
         /**
          * Fetch all the design docs in this db
          * @param {ajaxSettings} options <a href="http://api.jquery.com/
          * jQuery.ajax/#jQuery-ajax-settings">jQuery ajax settings</a>
          */
+
         allDesignDocs: function(options) {
           this.allDocs($.extend(
             {startkey:"_design", endkey:"_design0"}, options));

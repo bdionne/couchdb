@@ -59,6 +59,65 @@ function CouchDB(name, httpHeaders) {
     return result;
   };
 
+  // Save a relation between two docs to the database
+    this.addRelation = function(subj,pred,obj) {
+        var options = {subj : subj._id,
+                       pred : pred._id,
+                       obj : obj._id};
+        this.last_req = this.request("PUT", this.uri + "_onty" +
+                                     encodeOptions(options));
+        CouchDB.maybeThrowError(this.last_req);
+        return JSON.parse(this.last_req.responseText);
+    }
+
+    this.deleteRelation = function(subj,pred,obj) {
+        var options = {subj : subj._id,
+                       pred : pred._id,
+                       obj : obj._id};
+        this.last_req = this.request("DELETE", this.uri + "_onty" +
+                                     encodeOptions(options));
+        CouchDB.maybeThrowError(this.last_req);
+        return JSON.parse(this.last_req.responseText);
+    }
+
+    this.getRelationValues = function(subj,pred) {
+        var options = {subj : subj._id,
+                       pred : pred._id};
+        this.last_req = this.request("GET", this.uri + "_onty" +
+                                     encodeOptions(options));
+        CouchDB.maybeThrowError(this.last_req);
+        return JSON.parse(this.last_req.responseText);
+    }
+
+    this.getInvRelationValues = function(pred,obj) {
+        var options = {pred : pred._id,
+                       obj : obj._id};
+        this.last_req = this.request("GET", this.uri + "_onty" +
+                                     encodeOptions(options));
+        CouchDB.maybeThrowError(this.last_req);
+        return JSON.parse(this.last_req.responseText);
+    }
+          
+    this.getDefinition = function(subj) {
+        var options = {subj : subj._id};
+        this.last_req = this.request("GET", this.uri + "_onty" +
+                                     encodeOptions(options));
+        CouchDB.maybeThrowError(this.last_req);
+        return JSON.parse(this.last_req.responseText);
+    }
+
+    this.getRoots = function(pred) {
+      var options = {roots : true, pred : pred._id}
+      this.last_req = this.request("GET", this.uri + "_onty" +
+                                   encodeOptions(options));
+      CouchDB.maybeThrowError(this.last_req.responseText);
+      return JSON.parse(this.last_req.responseText);
+    }
+
+      
+          
+
+
   // Open a document from the database
   this.open = function(docId, url_params, http_headers) {
     this.last_req = this.request("GET", this.uri + encodeURIComponent(docId)
@@ -213,6 +272,14 @@ function CouchDB(name, httpHeaders) {
     return JSON.parse(this.last_req.responseText);
   };
 
+   this.searchDocs = function(options) {
+    this.last_req = this.request("GET", this.uri + "_index_query"
+        + encodeOptions(options));
+    CouchDB.maybeThrowError(this.last_req);
+    return JSON.parse(this.last_req.responseText);
+  }
+
+
   this.designDocs = function() {
     return this.allDocs({startkey:"_design", endkey:"_design0"});
   };
@@ -229,6 +296,21 @@ function CouchDB(name, httpHeaders) {
     CouchDB.maybeThrowError(this.last_req);
     return JSON.parse(this.last_req.responseText);
   };
+
+   this.index = function(options) {
+    this.last_req = this.request("POST", this.uri + "_index"
+    + encodeOptions(options));
+    CouchDB.maybeThrowError(this.last_req);
+    return JSON.parse(this.last_req.responseText);
+  }
+
+   this.ontySave = function(options) {
+    this.last_req = this.request("POST", this.uri + "_onty?save"
+                                 + encodeOptions(options));
+    CouchDB.maybeThrowError(this.last_req);
+    return JSON.parse(this.last_req.responseText);
+  }
+
 
   this.viewCleanup = function() {
     this.last_req = this.request("POST", this.uri + "_view_cleanup");

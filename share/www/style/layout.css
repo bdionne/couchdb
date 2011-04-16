@@ -312,10 +312,15 @@ body.loading #dialog h2 {
 
 /* Document quick jump */
 
-#jumpto { float: right; padding: 5px 10px 5px 5px; line-height: 16px;
+#search { float: right; padding: 5px 10px 5px 5px; line-height: 16px;
   font-weight: bold; color: #666; font-size: 90%; }
 
-#jumpto input { font-size: 90%; }
+#search input { font-size: 90%; }
+
+#filter { float: right; padding: 5px 10px 5px 5px; line-height: 16px;
+  font-weight: bold; color: #666; font-size: 90%; }
+
+#filter input { font-size: 90%; }
 
 /* View selector */
 

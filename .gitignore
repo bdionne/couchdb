@@ -15,8 +15,13 @@ configure
 autom4te.cache
 build-aux
 *.diff
-!.gitignore
-.*
+*.DS_Store
+*.sh
+
+include
+lib
+post
+libjs.dylib
 
 # ./configure
 
@@ -37,6 +42,7 @@ share/Makefile
 src/couchdb/.deps/*
 src/couchdb/Makefile
 src/couchdb/priv/Makefile
+src/couchdb/priv/couchspawnkillable
 src/mochiweb/Makefile
 stamp-h1
 test/.deps/
@@ -116,4 +122,17 @@ couchdb.stdout
 # for make cover
 
 cover/*
+
+# for emacs
+*.#*
+
+# for bitstore
+
 INSTALL
+*idx
+
+
+cloudantpass
+*-dag
+
+
