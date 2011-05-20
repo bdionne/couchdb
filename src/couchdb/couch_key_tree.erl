@@ -18,16 +18,16 @@
 %% would produce a tree of versions A->B->C indicating that edit C was based on
 %% version B which was in turn based on A. In a world without replication (and
 %% no ability to disable MVCC checks), all histories would be forced to be
-%% linear lists of edits due to constraints imposed by MVCC (ie, new edits must
+%% linear lists of edits due to constraints imposed by MVCC (.ie., new edits must
 %% be based on the current version). However, we have replication, so we must
-%% deal with not so easy cases, which lead to trees.
+%% deal with the cases that lead to trees.
 %%
 %% Consider a document in state A. This doc is replicated to a second node. We
 %% then edit the document on each node leaving it in two different states, B
 %% and C. We now have two key trees, A->B and A->C. When we go to replicate a
 %% second time, the key tree must combine these two trees which gives us
 %% A->(B|C). This is how conflicts are introduced. In terms of the key tree, we
-%% say that we have two leaves (B and C) that are not deleted. The presene of
+%% say that we have two leaves (B and C) that are not deleted. The presence of
 %% the multiple leaves indicate conflict. To remove a conflict, one of the
 %% edits (B or C) can be deleted, which results in, A->(B|C->D) where D is an
 %% edit that is specially marked with the a deleted=true flag.
