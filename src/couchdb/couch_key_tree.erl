@@ -98,7 +98,7 @@ merge(RevTree, Tree) ->
 %% If it can't find a branch that the new tree merges into, add it as a
 %% new branch in the RevTree.
 -spec merge_tree(revtree(), tree(), revtree()) -> {revtree(), boolean()}.
-merge_tree([], Tree, []) -> 
+merge_tree([], Tree, []) ->
     {[Tree], false};
 merge_tree([], Tree, Merged) ->
     {[Tree | Merged], true};
@@ -211,7 +211,7 @@ stem(RevTree, Length) ->
         StemmedPath = lists:sublist(Path, StemDepth),
         {LeafDepth + 1 - length(StemmedPath), StemmedPath}
     end, get_all_leafs_full(RevTree)),
-    
+
     % Convert our sorted list of paths back into a revision tree by
     % sorting them in order of closest to the root of the tree. After
     % sorting we're merely merging each new path into our accumulated
