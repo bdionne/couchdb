@@ -49,17 +49,17 @@
 
 -export([merge/3, stem/2, delete/2]).
 
--export([find_missing/2, get_key_leafs/2, get_full_key_paths/2, get/2]).
--export([get_all_leafs/1, count_leafs/1, get_all_leafs_full/1]).
--export([map/2, mapfold/3, map_leafs/2]).
+-export([find_missing/2, get_key_leaves/2, get_full_key_paths/2, get/2]).
+-export([get_all_leaves/1, count_leaves/1, get_all_leaves_full/1]).
+-export([map/2, mapfold/3, map_leaves/2]).
 
 -include("couch_db.hrl").
 
-% Node::term() is really a node(), but we don't want to require R13B04 yet
--type node() :: {Key::term(), Value::term(), [Node::term()]}.
--type tree() :: {Depth::pos_integer(), [node()]}.
+% Node::term() is really a treenode(), but we don't want to require R13B04 yet
+-type treenode() :: {Key::term(), Value::term(), [Node::term()]}.
+-type tree() :: {Depth::pos_integer(), [treenode()]}.
 -type revtree() :: [tree()].
--type path() :: {Value::term(), {Depth:pos_integer(), [term()]}}.
+-type path() :: {Value::term(), {Depth::pos_integer(), [term()]}}.
 
 
 %% Testing ideas:
@@ -112,8 +112,8 @@ merge_tree([{Depth, Nodes} | Rest], {IDepth, INodes}=Tree, Merged) ->
     % we begin our actual merge operation (ie, looking for key matches).
     case merge_at(Nodes, Depth - IDepth, INodes) of
         {NewNodes, Conflicts} ->
-            NewDepth = lists:min([Depth, InsDepth]),
-            {Rest ++ [{NewDepth, NewTree} | Merged], Conflicts};
+            NewDepth = lists:min([Depth, IDepth]),
+            {Rest ++ [{NewDepth, Tree} | Merged], Conflicts};
         unmerged ->
             merge(Rest, Tree, [{Depth, Nodes} | Merged])
     end.
@@ -124,16 +124,16 @@ merge_tree([{Depth, Nodes} | Rest], {IDepth, INodes}=Tree, Merged) ->
 %% before we can start comparing node keys. If one of the branches
 %% ends up running out of nodes we know that these two branches can
 %% not be merged.
--spec merge_at([node()], integer(), [node()]) -> {revtree(), boolean()} | fail.
+-spec merge_at([treenode()], integer(), [treenode()]) -> {revtree(), boolean()} | fail.
 merge_at(_Nodes, _Pos, []) ->
     fail;
 merge_at([], _Pos, _INodes) ->
     fail;
-merge_at(Nodes, Pos, [{_, _, [NextNode]} | Rest]) when Place > 0 ->
+merge_at(Nodes, Pos, [{_, _, [NextNode]} | Rest]) when Pos > 0 ->
     % When Pos is negative, Depth was less than IDepth, so we
     % need to discard from ITree
-    case merge_at(Nodes, Pos + 1, [NextTree]) of
-        {Merged, Conflicts} -> {[{K, V, Merged}], Conflicts}
+    case merge_at(Nodes, Pos + 1, [Rest]) of
+        {Merged, Conflicts} -> {[{K, V, Merged}], Conflicts};
         fail -> fail
     end;
 merge_at([{K, V, SubTree} | Sibs], Pos, INodes) when Place < 0 ->
@@ -210,7 +210,7 @@ stem(RevTree, Length) ->
     LeafPaths = lists:map(fun({LeafDepth, Path}) ->
         StemmedPath = lists:sublist(Path, StemDepth),
         {LeafDepth + 1 - length(StemmedPath), StemmedPath}
-    end, get_all_leafs_full(RevTree)),
+    end, get_all_leaves_full(RevTree)),
 
     % Convert our sorted list of paths back into a revision tree by
     % sorting them in order of closest to the root of the tree. After
@@ -231,10 +231,10 @@ stem(RevTree, Length) ->
 %% identified by a key value in Leaves. Once we remove these we
 %% simple rebuild the revision tree as in stem/2 and return it
 %% and the keys we removed.
--spec delete
+%% -spec delete
 delete(RevTree, Leaves) ->
     % Get the full path for each leaf value in the tree.
-    Paths = get_all_leafs_full(RevTree),
+    Paths = get_all_leaves_full(RevTree),
 
     % Remove any paths that are identified by keys in Leaves
 
@@ -301,20 +301,20 @@ foldl(Fun, Acc0, Depth, [{Key, Value, SubTree} | RestTree]) ->
     end.
 
 
-get_all_leafs_full(Tree) ->
+get_all_leaves_full(Tree) ->
     Pref = fun
         ({Pos, Key, Value}, branch, Acc) ->
             {ok, [{Key, Val} | Acc]};
         ({Pos, Key, Value}, leaf, Acc) ->
-            {ok, {Pos, [{Key, Val} | Acc]}};
+            {ok, {Pos, [{Key, Val} | Acc]}}
     end,
     foldl(RevTree, Pred, []).
 
 
-get_all_leafs(RevTree) ->
-    get_all_leafs(RevTree, []).
+get_all_leaves(RevTree) ->
+    get_all_leaves(RevTree, []).
 
-get_all_leafs(RevTree, Acc0) ->
+get_all_leaves(RevTree, Acc0) ->
     Pred = fun
         ({_Pos, Key, _Val}, branch, Acc) ->
             {ok, {Val, {Pos, [Key | Acc]}}};
@@ -365,36 +365,36 @@ find_missing_simple(Pos, [{Key, _, SubTree} | RestTree], SeachKeys) ->
 
 
 
-% get the leafs in the tree matching the keys. The matching key nodes can be
-% leafs or an inner nodes. If an inner node, then the leafs for that node
+% get the leaves in the tree matching the keys. The matching key nodes can be
+% leaves or an inner nodes. If an inner node, then the leaves for that node
 % are returned.
-get_key_leafs(Tree, Keys) ->
-    get_key_leafs(Tree, Keys, []).
+get_key_leaves(Tree, Keys) ->
+    get_key_leaves(Tree, Keys, []).
 
-get_key_leafs(_, [], Acc) ->
+get_key_leaves(_, [], Acc) ->
     {Acc, []};
-get_key_leafs([], Keys, Acc) ->
+get_key_leaves([], Keys, Acc) ->
     {Acc, Keys};
-get_key_leafs([{Pos, Tree}|Rest], Keys, Acc) ->
-    {Gotten, RemainingKeys} = get_key_leafs_simple(Pos, [Tree], Keys, []),
-    get_key_leafs(Rest, RemainingKeys, Gotten ++ Acc).
+get_key_leaves([{Pos, Tree}|Rest], Keys, Acc) ->
+    {Gotten, RemainingKeys} = get_key_leaves_simple(Pos, [Tree], Keys, []),
+    get_key_leaves(Rest, RemainingKeys, Gotten ++ Acc).
 
-get_key_leafs_simple(_Pos, _Tree, [], _KeyPathAcc) ->
+get_key_leaves_simple(_Pos, _Tree, [], _KeyPathAcc) ->
     {[], []};
-get_key_leafs_simple(_Pos, [], KeysToGet, _KeyPathAcc) ->
+get_key_leaves_simple(_Pos, [], KeysToGet, _KeyPathAcc) ->
     {[], KeysToGet};
-get_key_leafs_simple(Pos, [{Key, _Value, SubTree}=Tree | RestTree], KeysToGet, KeyPathAcc) ->
+get_key_leaves_simple(Pos, [{Key, _Value, SubTree}=Tree | RestTree], KeysToGet, KeyPathAcc) ->
     case lists:delete({Pos, Key}, KeysToGet) of
     KeysToGet -> % same list, key not found
-        {LeafsFound, KeysToGet2} = get_key_leafs_simple(Pos + 1, SubTree, KeysToGet, [Key | KeyPathAcc]),
-        {RestLeafsFound, KeysRemaining} = get_key_leafs_simple(Pos, RestTree, KeysToGet2, KeyPathAcc),
-        {LeafsFound ++ RestLeafsFound, KeysRemaining};
+        {LeavesFound, KeysToGet2} = get_key_leaves_simple(Pos + 1, SubTree, KeysToGet, [Key | KeyPathAcc]),
+        {RestLeavesFound, KeysRemaining} = get_key_leaves_simple(Pos, RestTree, KeysToGet2, KeyPathAcc),
+        {LeavesFound ++ RestLeavesFound, KeysRemaining};
     KeysToGet2 ->
-        LeafsFound = get_all_leafs_simple(Pos, [Tree], KeyPathAcc),
-        LeafKeysFound = [LeafKeyFound || {LeafKeyFound, _} <- LeafsFound],
+        LeavesFound = get_all_leaves_simple(Pos, [Tree], KeyPathAcc),
+        LeafKeysFound = [LeafKeyFound || {LeafKeyFound, _} <- LeavesFound],
         KeysToGet2 = KeysToGet2 -- LeafKeysFound,
-        {RestLeafsFound, KeysRemaining} = get_key_leafs_simple(Pos, RestTree, KeysToGet2, KeyPathAcc),
-        {LeafsFound ++ RestLeafsFound, KeysRemaining}
+        {RestLeavesFound, KeysRemaining} = get_key_leaves_simple(Pos, RestTree, KeysToGet2, KeyPathAcc),
+        {LeavesFound ++ RestLeavesFound, KeysRemaining}
     end.
 
 get(Tree, KeysToGet) ->
@@ -470,19 +470,19 @@ mapfold_simple(Fun, Acc, Pos, [{Key, Value, SubTree} | RestTree]) ->
     {[{Key, Value2, SubTree2} | RestTree2], Acc4}.
 
 
-map_leafs(_Fun, []) ->
+map_leaves(_Fun, []) ->
     [];
-map_leafs(Fun, [{Pos, Tree}|Rest]) ->
-    [NewTree] = map_leafs_simple(Fun, Pos, [Tree]),
-    [{Pos, NewTree} | map_leafs(Fun, Rest)].
+map_leaves(Fun, [{Pos, Tree}|Rest]) ->
+    [NewTree] = map_leaves_simple(Fun, Pos, [Tree]),
+    [{Pos, NewTree} | map_leaves(Fun, Rest)].
 
-map_leafs_simple(_Fun, _Pos, []) ->
+map_leaves_simple(_Fun, _Pos, []) ->
     [];
-map_leafs_simple(Fun, Pos, [{Key, Value, []} | RestTree]) ->
+map_leaves_simple(Fun, Pos, [{Key, Value, []} | RestTree]) ->
     Value2 = Fun({Pos, Key}, Value),
-    [{Key, Value2, []} | map_leafs_simple(Fun, Pos, RestTree)];
-map_leafs_simple(Fun, Pos, [{Key, Value, SubTree} | RestTree]) ->
-    [{Key, Value, map_leafs_simple(Fun, Pos + 1, SubTree)} | map_leafs_simple(Fun, Pos, RestTree)].
+    [{Key, Value2, []} | map_leaves_simple(Fun, Pos, RestTree)];
+map_leaves_simple(Fun, Pos, [{Key, Value, SubTree} | RestTree]) ->
+    [{Key, Value, map_leaves_simple(Fun, Pos + 1, SubTree)} | map_leaves_simple(Fun, Pos, RestTree)].
 
 
 
