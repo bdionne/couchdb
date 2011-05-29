@@ -137,9 +137,9 @@ specific language governing permissions and limitations under the License.
           //alert("foo " + $("#filter select").val());
           var map = [];
           var slot = $("#filter select").val();
-          
+
           findId = function(pref_name) {
-             
+
              for (var j = 0; j < map.length; j++) {
                 if (map[j][$("#filter select").val()] == pref_name) {
                    if (slot == "id") {
@@ -170,7 +170,7 @@ specific language governing permissions and limitations under the License.
             field: slot,
             success: function(docs) {
               var matches = [];
-              
+
               for (var i = 0; i < docs.rows.length; i++) {
                   matches[i] = docs.rows[i][$("#filter select").val()];
                   map[i] = docs.rows[i];
@@ -209,15 +209,15 @@ specific language governing permissions and limitations under the License.
         </select></label>
       </div>
        <div id="filter">
-	 <label>Filter By: <select autocomplete="false">
+         <label>Filter By: <select autocomplete="false">
           <option value="id">ID</option>
-        </select></label>        
+        </select></label>
       </div>
        <div id="search">
         <label>Search For:
           <input type="text" name="docid" autocomplete="off" />
         </label>
-      </div>      
+      </div>
       <ul id="toolbar">
         <li><button class="add">New Document</button></li>
         <li><button class="security">Security…</button></li>
