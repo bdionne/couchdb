@@ -26,7 +26,7 @@ function T(arg1, arg2) {
 function runTestConsole(num, name, func) {
   try {
     func();
-    print("ok " + num + " " + name);
+    console.log("ok " + num + " " + name);
   } catch(e) {
     msg = e.toString();
     msg = msg.replace(/\n/g, "\n    ");
