@@ -281,5 +281,6 @@
     assemble_kv = fun(Key, Value) -> {Key, Value} end,
     less = fun(A, B) -> A < B end,
     reduce = nil,
+    chunk_size = 1279,
     compression = ?DEFAULT_COMPRESSION
 }).

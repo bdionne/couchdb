@@ -24,6 +24,7 @@ rows() -> 250.
     assemble_kv,
     less,
     reduce,
+    chunk_size=1279,
     compression
 }).
 

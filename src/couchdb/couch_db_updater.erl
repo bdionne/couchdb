@@ -425,10 +425,15 @@ init_db(DbName, Filepath, Fd, ReaderFd, Header0, Options) ->
 
     Compression = couch_compress:get_compression_method(),
 
+    ChunkSize =
+                list_to_integer(couch_config:get("couchdb",
+                                                         "btree_chunk_size", "1279")),
+
     {ok, IdBtree} = couch_btree:open(Header#db_header.fulldocinfo_by_id_btree_state, Fd,
         [{split, fun(X) -> btree_by_id_split(X) end},
         {join, fun(X,Y) -> btree_by_id_join(X,Y) end},
         {reduce, fun(X,Y) -> btree_by_id_reduce(X,Y) end},
+        {chunk_size, ChunkSize},
         {compression, Compression}]),
     {ok, SeqBtree} = couch_btree:open(Header#db_header.docinfo_by_seq_btree_state, Fd,
             [{split, fun(X) -> btree_by_seq_split(X) end},
