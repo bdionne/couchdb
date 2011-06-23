@@ -439,9 +439,11 @@ init_db(DbName, Filepath, Fd, ReaderFd, Header0, Options) ->
             [{split, fun(X) -> btree_by_seq_split(X) end},
             {join, fun(X,Y) -> btree_by_seq_join(X,Y) end},
             {reduce, fun(X,Y) -> btree_by_seq_reduce(X,Y) end},
+            {chunk_size, ChunkSize},
             {compression, Compression}]),
     {ok, LocalDocsBtree} = couch_btree:open(Header#db_header.local_docs_btree_state, Fd,
-        [{compression, Compression}]),
+        [{compression, Compression},
+         {chunk_size, ChunkSize}]),
     case Header#db_header.security_ptr of
     nil ->
         Security = [],

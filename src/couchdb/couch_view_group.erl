@@ -622,9 +622,14 @@ init_group(Db, Fd, #group{def_lang=Lang,views=Views}=
         ({_, _, _}=State) -> State;
         (State) -> {State, 0, 0}
     end,
+    ChunkSize =
+                list_to_integer(couch_config:get("couchdb",
+                                                         "btree_chunk_size", "1279")),
+
     ViewStates2 = lists:map(StateUpdate, ViewStates),
     {ok, IdBtree} = couch_btree:open(
-        IdBtreeState, Fd, [{compression, Db#db.compression}]),
+        IdBtreeState, Fd, [{compression, Db#db.compression},
+                           {chunk_size, ChunkSize}]),
     Views2 = lists:zipwith(
         fun({BTState, USeq, PSeq}, #view{reduce_funs=RedFuns,options=Options}=View) ->
             FunSrcs = [FunSrc || {_Name, FunSrc} <- RedFuns],
@@ -649,10 +654,6 @@ init_group(Db, Fd, #group{def_lang=Lang,views=Views}=
             <<"raw">> ->
                 Less = fun(A,B) -> A < B end
             end,
-            ChunkSize =
-                list_to_integer(couch_config:get("couchdb",
-                                                         "btree_chunk_size", "1279")),
-            io:format("using chunk_size ~p ~n",[ChunkSize]),
             {ok, Btree} = couch_btree:open(BTState, Fd,
                     [{less, Less}, {reduce, ReduceFun},
                         {chunk_size, ChunkSize}, {compression, Db#db.compression}]
