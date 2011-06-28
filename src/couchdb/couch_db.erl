@@ -225,7 +225,15 @@ get_full_doc_info(Db, Id) ->
     Result.
 
 get_full_doc_infos(Db, Ids) ->
-    couch_btree:lookup(by_id_btree(Db), Ids).
+    Docs = couch_btree:lookup(by_id_btree(Db), Ids),
+    lists:map(fun(Doc) ->
+                  case Doc of
+                  not_found -> not_found;
+                  {ok, DocInfo} ->
+                      [FullDocInfo] = couch_db_updater:to_full_doc_infos(Db#db.fd, [DocInfo], []),
+                      {ok, FullDocInfo}
+                  end
+              end,Docs).
 
 increment_update_seq(#db{update_pid=UpdatePid}) ->
     gen_server:call(UpdatePid, increment_update_seq).
@@ -296,8 +304,8 @@ sum_tree_sizes(Acc, [T | Rest]) ->
 
 get_design_docs(Db) ->
     {ok,_, Docs} = couch_btree:fold(by_id_btree(Db),
-        fun(#full_doc_info{id= <<"_design/",_/binary>>}=FullDocInfo, _Reds, AccDocs) ->
-            {ok, Doc} = open_doc_int(Db, FullDocInfo, [ejson_body]),
+        fun(#doc_info{id= <<"_design/",_/binary>>}=DocInfo, _Reds, AccDocs) ->
+            {ok, Doc} = open_doc_int(Db, DocInfo, [ejson_body]),
             {ok, [Doc | AccDocs]};
         (_, _Reds, AccDocs) ->
             {stop, AccDocs}

@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 -export([btree_by_id_reduce/2,btree_by_seq_reduce/2]).
--export([make_doc_summary/2]).
+-export([make_doc_summary/2, to_full_doc_infos/3]).
 -export([init/1,terminate/2,handle_call/3,handle_cast/2,code_change/3,handle_info/2]).
 
 -include("couch_db.hrl").
@@ -93,19 +93,19 @@ handle_call({purge_docs, IdRevs}, _From, Db) ->
         header = Header = #db_header{purge_seq=PurgeSeq},
         compression = Comp
         } = Db,
-    DocLookups = couch_btree:lookup(DocInfoByIdBTree,
-            [Id || {Id, _Revs} <- IdRevs]),
+    DocInfoLookups = [DocInfo || {ok, DocInfo} <- couch_btree:lookup(DocInfoByIdBTree,
+            [Id || {Id, _Revs} <- IdRevs])],
+
+    DocLookups = to_full_doc_infos(Fd, DocInfoLookups, []),
 
     NewDocInfos = lists:zipwith(
-        fun({_Id, Revs}, {ok, #full_doc_info{rev_tree=Tree}=FullDocInfo}) ->
+        fun({_Id, Revs}, #full_doc_info{rev_tree=Tree}=FullDocInfo) ->
             case couch_key_tree:remove_leafs(Tree, Revs) of
             {_, []=_RemovedRevs} -> % no change
                 nil;
             {NewTree, RemovedRevs} ->
                 {FullDocInfo#full_doc_info{rev_tree=NewTree},RemovedRevs}
-            end;
-        (_, not_found) ->
-            nil
+            end
         end,
         IdRevs, DocLookups),
 
@@ -289,7 +289,7 @@ collect_updates(GroupedDocsAcc, ClientsAcc, MergeConflicts, FullCommit) ->
     end.
 
 
-btree_by_seq_split(#doc_info{id=Id, high_seq=KeySeq, revs=Revs}) ->
+doc_info_to_seq_disk(#doc_info{id=Id, high_seq=KeySeq, full_doc_info=FullDocPtr, revs=Revs}) ->
     {RevInfos, DeletedRevInfos} = lists:foldl(
         fun(#rev_info{deleted = false, seq = Seq} = Ri, {Acc, AccDel}) ->
                 {[{Ri#rev_info.rev, Seq, Ri#rev_info.body_sp} | Acc], AccDel};
@@ -297,19 +297,44 @@ btree_by_seq_split(#doc_info{id=Id, high_seq=KeySeq, revs=Revs}) ->
                 {Acc, [{Ri#rev_info.rev, Seq, Ri#rev_info.body_sp} | AccDel]}
         end,
         {[], []}, Revs),
-    {KeySeq, {Id, lists:reverse(RevInfos), lists:reverse(DeletedRevInfos)}}.
+    {KeySeq, {Id, lists:reverse(RevInfos), lists:reverse(DeletedRevInfos), FullDocPtr}}.
 
-btree_by_seq_join(KeySeq, {Id, RevInfos, DeletedRevInfos}) ->
+seq_disk_to_doc_info(KeySeq, {Id, RevInfos, DeletedRevInfos, FullDocPtr}) ->
     #doc_info{
         id = Id,
         high_seq=KeySeq,
+        full_doc_info=FullDocPtr,
         revs =
             [#rev_info{rev=Rev,seq=Seq,deleted=false,body_sp = Bp} ||
                 {Rev, Seq, Bp} <- RevInfos] ++
             [#rev_info{rev=Rev,seq=Seq,deleted=true,body_sp = Bp} ||
                 {Rev, Seq, Bp} <- DeletedRevInfos]}.
 
-btree_by_id_split(#full_doc_info{id=Id, update_seq=Seq,
+doc_info_to_id_disk(#doc_info{id=Id, high_seq=KeySeq, full_doc_info=FullDocPtr, revs=Revs, deleted=Del, leafs_size=Size}) ->
+    {RevInfos, DeletedRevInfos} = lists:foldl(
+        fun(#rev_info{deleted = false, seq = Seq} = Ri, {Acc, AccDel}) ->
+                {[{Ri#rev_info.rev, Seq, Ri#rev_info.body_sp} | Acc], AccDel};
+            (#rev_info{deleted = true, seq = Seq} = Ri, {Acc, AccDel}) ->
+                {Acc, [{Ri#rev_info.rev, Seq, Ri#rev_info.body_sp} | AccDel]}
+        end,
+        {[], []}, Revs),
+    {Id, {KeySeq, lists:reverse(RevInfos), lists:reverse(DeletedRevInfos), FullDocPtr, Del, Size}}.
+
+id_disk_to_doc_info(Id, {KeySeq, RevInfos, DeletedRevInfos, FullDocPtr, Del, Size}) ->
+    #doc_info{
+        id = Id,
+        high_seq=KeySeq,
+        full_doc_info=FullDocPtr,
+        revs =
+            [#rev_info{rev=Rev,seq=Seq,deleted=false,body_sp = Bp} ||
+                {Rev, Seq, Bp} <- RevInfos] ++
+            [#rev_info{rev=Rev,seq=Seq,deleted=true,body_sp = Bp} ||
+                {Rev, Seq, Bp} <- DeletedRevInfos],
+        deleted=Del,
+        leafs_size=Size
+             }.
+
+full_doc_info_to_disk(#full_doc_info{id=Id, update_seq=Seq,
         deleted=Deleted, rev_tree=Tree}) ->
     DiskTree =
     couch_key_tree:map(
@@ -330,7 +355,7 @@ btree_by_id_split(#full_doc_info{id=Id, update_seq=Seq,
         end, Tree),
     {Id, {Seq, if Deleted -> 1; true -> 0 end, DiskTree}}.
 
-btree_by_id_join(Id, {HighSeq, Deleted, DiskTree}) ->
+disk_to_full_doc_info(Id, {HighSeq, Deleted, DiskTree}) ->
     {Tree, LeafsSize} =
     couch_key_tree:mapfold(
         fun(_RevId, {IsDeleted, BodyPointer, UpdateSeq}, leaf, _Acc) ->
@@ -357,8 +382,8 @@ btree_by_id_join(Id, {HighSeq, Deleted, DiskTree}) ->
 btree_by_id_reduce(reduce, FullDocInfos) ->
     lists:foldl(
         fun(Info, {NotDeleted, Deleted, Size}) ->
-            Size2 = sum_leaf_sizes(Size, Info#full_doc_info.leafs_size),
-            case Info#full_doc_info.deleted of
+            Size2 = sum_leaf_sizes(Size, Info#doc_info.leafs_size),
+            case Info#doc_info.deleted of
             true ->
                 {NotDeleted, Deleted + 1, Size2};
             false ->
@@ -425,25 +450,20 @@ init_db(DbName, Filepath, Fd, ReaderFd, Header0, Options) ->
 
     Compression = couch_compress:get_compression_method(),
 
-    ChunkSize =
-                list_to_integer(couch_config:get("couchdb",
-                                                         "btree_chunk_size", "1279")),
-
     {ok, IdBtree} = couch_btree:open(Header#db_header.fulldocinfo_by_id_btree_state, Fd,
-        [{split, fun(X) -> btree_by_id_split(X) end},
-        {join, fun(X,Y) -> btree_by_id_join(X,Y) end},
+        [{split, fun(X) -> doc_info_to_id_disk(X) end},
+        {join, fun(X,Y) -> id_disk_to_doc_info(X,Y) end},
+        %%   [{split, fun(X) -> btree_by_id_split(X) end},
+        %% {join, fun(X,Y) -> btree_by_id_join(X,Y) end},
         {reduce, fun(X,Y) -> btree_by_id_reduce(X,Y) end},
-        {chunk_size, ChunkSize},
         {compression, Compression}]),
     {ok, SeqBtree} = couch_btree:open(Header#db_header.docinfo_by_seq_btree_state, Fd,
-            [{split, fun(X) -> btree_by_seq_split(X) end},
-            {join, fun(X,Y) -> btree_by_seq_join(X,Y) end},
+            [{split, fun(X) -> doc_info_to_seq_disk(X) end},
+            {join, fun(X,Y) -> seq_disk_to_doc_info(X,Y) end},
             {reduce, fun(X,Y) -> btree_by_seq_reduce(X,Y) end},
-            {chunk_size, ChunkSize},
             {compression, Compression}]),
     {ok, LocalDocsBtree} = couch_btree:open(Header#db_header.local_docs_btree_state, Fd,
-        [{compression, Compression},
-         {chunk_size, ChunkSize}]),
+        [{compression, Compression}]),
     case Header#db_header.security_ptr of
     nil ->
         Security = [],
@@ -638,22 +658,37 @@ merge_rev_trees(Limit, MergeConflicts, [NewDocs|RestDocsList],
 
 
 
-new_index_entries([], AccById, AccBySeq) ->
-    {AccById, AccBySeq};
-new_index_entries([FullDocInfo|RestInfos], AccById, AccBySeq) ->
+new_index_entries(_Db, [], AccBySeq) ->
+    AccBySeq;
+new_index_entries(#db{updater_fd=Fd, compression=Comp}=Db, [FullDocInfo|RestInfos], AccBySeq) ->
     #doc_info{revs=[#rev_info{deleted=Deleted}|_]} = DocInfo =
             couch_doc:to_doc_info(FullDocInfo),
-    new_index_entries(RestInfos,
-        [FullDocInfo#full_doc_info{deleted=Deleted}|AccById],
-        [DocInfo|AccBySeq]).
-
+    {ok, Pointer, _Size} = couch_file:append_term(
+                Fd, full_doc_info_to_disk(FullDocInfo#full_doc_info{deleted=Deleted}) , [{compression, Comp}]),
+    new_index_entries(Db, RestInfos,
+        [DocInfo#doc_info{full_doc_info=Pointer, deleted=Deleted}|AccBySeq]).
 
 stem_full_doc_infos(#db{revs_limit=Limit}, DocInfos) ->
     [Info#full_doc_info{rev_tree=couch_key_tree:stem(Tree, Limit)} ||
             #full_doc_info{rev_tree=Tree}=Info <- DocInfos].
 
+to_full_doc_infos(_Fd, [], Acc) ->
+    lists:reverse(Acc);
+to_full_doc_infos(Fd, [#doc_info{id=Id, full_doc_info=FullInfoPtr}|RestDocInfos], Acc) ->
+    to_full_doc_infos(Fd,
+                      RestDocInfos,
+                      [case FullInfoPtr of
+                       nil ->
+                           #full_doc_info{id=Id};
+                       _ ->
+                           {ok, {Id, Term}} = couch_file:pread_term(Fd, FullInfoPtr),
+                           disk_to_full_doc_info(Id, Term)
+                       end | Acc]).
+
+
 update_docs_int(Db, DocsList, NonRepDocs, MergeConflicts, FullCommit) ->
     #db{
+        fd = Fd,
         fulldocinfo_by_id_btree = DocInfoByIdBTree,
         docinfo_by_seq_btree = DocInfoBySeqBTree,
         update_seq = LastSeq,
@@ -662,13 +697,13 @@ update_docs_int(Db, DocsList, NonRepDocs, MergeConflicts, FullCommit) ->
     Ids = [Id || [{_Client, #doc{id=Id}}|_] <- DocsList],
     % lookup up the old documents, if they exist.
     OldDocLookups = couch_btree:lookup(DocInfoByIdBTree, Ids),
-    OldDocInfos = lists:zipwith(
-        fun(_Id, {ok, FullDocInfo}) ->
-            FullDocInfo;
+    OldDocInfos = to_full_doc_infos(Fd, lists:zipwith(
+        fun(_Id, {ok, DocInfo}) ->
+            DocInfo;
         (Id, not_found) ->
-            #full_doc_info{id=Id}
+            #doc_info{id=Id}
         end,
-        Ids, OldDocLookups),
+        Ids, OldDocLookups), []),
     % Merge the new docs into the revision trees.
     {ok, NewFullDocInfos, RemoveSeqs, NewSeq} = merge_rev_trees(RevsLimit,
             MergeConflicts, DocsList, OldDocInfos, [], [], LastSeq),
@@ -681,11 +716,11 @@ update_docs_int(Db, DocsList, NonRepDocs, MergeConflicts, FullCommit) ->
     % the trees, the attachments are already written to disk)
     {ok, FlushedFullDocInfos} = flush_trees(Db2, NewFullDocInfos, []),
 
-    {IndexFullDocInfos, IndexDocInfos} =
-            new_index_entries(FlushedFullDocInfos, [], []),
+    IndexDocInfos =
+            new_index_entries(Db2, FlushedFullDocInfos, []),
 
     % and the indexes
-    {ok, DocInfoByIdBTree2} = couch_btree:add_remove(DocInfoByIdBTree, IndexFullDocInfos, []),
+    {ok, DocInfoByIdBTree2} = couch_btree:add_remove(DocInfoByIdBTree, IndexDocInfos, []),
     {ok, DocInfoBySeqBTree2} = couch_btree:add_remove(DocInfoBySeqBTree, IndexDocInfos, RemoveSeqs),
 
     Db3 = Db2#db{
@@ -836,10 +871,10 @@ copy_docs(Db, #db{updater_fd = DestFd} = NewDb, InfoBySeq0, Retry) ->
     InfoBySeq = lists:usort(fun(#doc_info{id=A}, #doc_info{id=B}) -> A =< B end,
         InfoBySeq0),
     Ids = [Id || #doc_info{id=Id} <- InfoBySeq],
-    LookupResults = couch_btree:lookup(Db#db.fulldocinfo_by_id_btree, Ids),
+    LookupResults = to_full_doc_infos(Db#db.fd, InfoBySeq, []),
 
     NewFullDocInfos1 = lists:map(
-        fun({ok, #full_doc_info{rev_tree=RevTree}=Info}) ->
+        fun(#full_doc_info{rev_tree=RevTree}=Info) ->
             Info#full_doc_info{rev_tree=couch_key_tree:map(
                 fun(_, _, branch) ->
                     ?REV_MISSING;
@@ -860,7 +895,16 @@ copy_docs(Db, #db{updater_fd = DestFd} = NewDb, InfoBySeq0, Retry) ->
         end, LookupResults),
 
     NewFullDocInfos = stem_full_doc_infos(Db, NewFullDocInfos1),
-    NewDocInfos = [couch_doc:to_doc_info(Info) || Info <- NewFullDocInfos],
+
+    NewDocInfos = lists:map(
+                    fun(Info) ->
+                        DocInfo = couch_doc:to_doc_info(Info),
+                        {ok, Pointer, _Size} =
+                            couch_file:append_term(
+                              NewDb#db.updater_fd, full_doc_info_to_disk(Info) , [{compression, NewDb#db.compression}]),
+                        DocInfo#doc_info{full_doc_info=Pointer}
+                    end,NewFullDocInfos),
+
     RemoveSeqs =
     case Retry of
     false ->
@@ -868,14 +912,17 @@ copy_docs(Db, #db{updater_fd = DestFd} = NewDb, InfoBySeq0, Retry) ->
     true ->
         % We are retrying a compaction, meaning the documents we are copying may
         % already exist in our file and must be removed from the by_seq index.
-        Existing = couch_btree:lookup(NewDb#db.fulldocinfo_by_id_btree, Ids),
+
+        ExistingDocInfos = [DocInfo || {ok, DocInfo} <- couch_btree:lookup(NewDb#db.fulldocinfo_by_id_btree, Ids)],
+        Existing = to_full_doc_infos(NewDb#db.fd, ExistingDocInfos,
+                                     []),
         [Seq || {ok, #full_doc_info{update_seq=Seq}} <- Existing]
     end,
 
     {ok, DocInfoBTree} = couch_btree:add_remove(
             NewDb#db.docinfo_by_seq_btree, NewDocInfos, RemoveSeqs),
     {ok, FullDocInfoBTree} = couch_btree:add_remove(
-            NewDb#db.fulldocinfo_by_id_btree, NewFullDocInfos, []),
+            NewDb#db.fulldocinfo_by_id_btree, NewDocInfos, []),
     NewDb#db{ fulldocinfo_by_id_btree=FullDocInfoBTree,
               docinfo_by_seq_btree=DocInfoBTree}.
 

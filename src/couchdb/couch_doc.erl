@@ -324,7 +324,7 @@ max_seq([], Max) ->
 max_seq([#rev_info{seq=Seq}|Rest], Max) ->
     max_seq(Rest, if Max > Seq -> Max; true -> Seq end).
 
-to_doc_info_path(#full_doc_info{id=Id,rev_tree=Tree}) ->
+to_doc_info_path(#full_doc_info{id=Id,deleted=Deleted,rev_tree=Tree,leafs_size=Size}) ->
     RevInfosAndPath = [
         {#rev_info{
             deleted = element(1, LeafVal),
@@ -342,7 +342,7 @@ to_doc_info_path(#full_doc_info{id=Id,rev_tree=Tree}) ->
         end, RevInfosAndPath),
     [{_RevInfo, WinPath}|_] = SortedRevInfosAndPath,
     RevInfos = [RevInfo || {RevInfo, _Path} <- SortedRevInfosAndPath],
-    {#doc_info{id=Id, high_seq=max_seq(RevInfos, 0), revs=RevInfos}, WinPath}.
+    {#doc_info{id=Id, high_seq=max_seq(RevInfos, 0), revs=RevInfos, deleted=Deleted, leafs_size=Size}, WinPath}.
 
 
 

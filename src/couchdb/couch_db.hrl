@@ -57,7 +57,11 @@
     {
     id = <<"">>,
     high_seq = 0,
-    revs = [] % rev_info
+    full_doc_info = nil, % stream pointer to full_doc_info
+    revs = [], % rev_info
+    deleted = false,
+    leafs_size = 0
+      
     }).
 
 -record(full_doc_info,

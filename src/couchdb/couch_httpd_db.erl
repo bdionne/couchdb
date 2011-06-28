@@ -517,11 +517,11 @@ all_docs_view(Req, Db, Keys) ->
                     reduce_count = fun couch_db:enum_docs_reduce_to_count/1,
                     send_row = fun all_docs_send_json_view_row/6
                 }),
-            AdapterFun = fun(#full_doc_info{id=Id}=FullDocInfo, Offset, Acc) ->
-                case couch_doc:to_doc_info(FullDocInfo) of
-                #doc_info{revs=[#rev_info{deleted=false}|_]} = DocInfo ->
+            AdapterFun = fun(#doc_info{id=Id, deleted=Deleted}=DocInfo, Offset, Acc) ->
+                case Deleted of
+                false ->
                     FoldlFun({{Id, Id}, DocInfo}, Offset, Acc);
-                #doc_info{revs=[#rev_info{deleted=true}|_]} ->
+                true ->
                     {ok, Acc}
                 end
             end,
