@@ -20,12 +20,12 @@ rows() -> 250.
 -record(btree, {
     fd,
     root,
-    extract_kv,
-    assemble_kv,
-    less,
-    reduce,
-    chunk_size=1279,
-    compression
+    extract_kv = fun({_Key, _Value} = KV) -> KV end,
+    assemble_kv = fun(Key, Value) -> {Key, Value} end,
+    less = fun(A, B) -> A < B end,
+    reduce = nil,
+    chunk_size = 1279,
+    compression = snappy
 }).
 
 main(_) ->

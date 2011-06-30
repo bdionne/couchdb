@@ -96,8 +96,8 @@ fold_reduce(#btree{root=Root}=Bt, Fun, Acc, Options) ->
 
 full_reduce(#btree{root=nil,reduce=Reduce}) ->
     {ok, Reduce(reduce, [])};
-full_reduce(#btree{root=Root}) ->
-    {ok, element(2, Root)}.
+full_reduce(#btree{fd = Fd, root=Root}) ->
+    {ok, get_red(Fd, element(2, Root))}.
 
 size(#btree{root = nil}) ->
     0;
@@ -148,7 +148,7 @@ foldl(Bt, Fun, Acc, Options) ->
 
 fold(#btree{root=nil}, _Fun, Acc, _Options) ->
     {ok, {[], []}, Acc};
-fold(#btree{root=Root}=Bt, Fun, Acc, Options) ->
+fold(#btree{fd=Fd, root=Root}=Bt, Fun, Acc, Options) ->
     Dir = couch_util:get_value(dir, Options, fwd),
     InRange = make_key_in_end_range_function(Bt, Dir, Options),
     Result =
@@ -162,7 +162,7 @@ fold(#btree{root=Root}=Bt, Fun, Acc, Options) ->
     end,
     case Result of
     {ok, Acc2}->
-        FullReduction = element(2, Root),
+        FullReduction = get_red(Fd, element(2, Root)),
         {ok, {[], [FullReduction]}, Acc2};
     {stop, LastReduction, Acc2} ->
         {ok, LastReduction, Acc2}
@@ -327,10 +327,14 @@ modify_node(Bt, RootPointerInfo, Actions, QueryOutput) ->
         {ok, ResultList, QueryOutput2}
     end.
 
+get_red(Fd, RedPtr) ->
+    {ok, Red} = couch_file:pread_term(Fd, RedPtr),
+    Red.
+
 reduce_node(#btree{reduce=nil}, _NodeType, _NodeList) ->
     [];
-reduce_node(#btree{reduce=R}, kp_node, NodeList) ->
-    R(rereduce, [element(2, Node) || {_K, Node} <- NodeList]);
+reduce_node(#btree{fd = Fd, reduce=R}, kp_node, NodeList) ->
+    R(rereduce, [get_red(Fd, element(2, Node)) || {_K, Node} <- NodeList]);
 reduce_node(#btree{reduce=R}=Bt, kv_node, NodeList) ->
     R(reduce, [assemble(Bt, K, V) || {K, V} <- NodeList]).
 
@@ -360,7 +364,10 @@ write_node(#btree{fd = Fd, compression = Comp} = Bt, NodeType, NodeList) ->
                 Fd, {NodeType, ANodeList}, [{compression, Comp}]),
             {LastKey, _} = lists:last(ANodeList),
             SubTreeSize = reduce_tree_size(NodeType, Size, ANodeList),
-            {LastKey, {Pointer, reduce_node(Bt, NodeType, ANodeList), SubTreeSize}}
+            {ok, RedPointer, _RedSize} = couch_file:append_term(Fd,reduce_node(Bt, NodeType, ANodeList),
+                                                               [{compression, Comp}]),
+            %%{LastKey, {Pointer, reduce_node(Bt, NodeType, ANodeList), SubTreeSize}}
+            {LastKey, {Pointer, RedPointer, SubTreeSize}}
         end
     ||
         ANodeList <- NodeListList
@@ -575,7 +582,7 @@ reduce_stream_kp_node2(Bt, Dir, [{_Key, NodeInfo} | RestNodeList], KeyStart, Key
                 [], [], KeyGroupFun, Fun, Acc),
     reduce_stream_kp_node2(Bt, Dir, RestNodeList, KeyStart, KeyEnd, GroupedKey2,
             GroupedKVsAcc2, GroupedRedsAcc2, KeyGroupFun, Fun, Acc2);
-reduce_stream_kp_node2(Bt, Dir, NodeList, KeyStart, KeyEnd,
+reduce_stream_kp_node2(#btree{fd=Fd}=Bt, Dir, NodeList, KeyStart, KeyEnd,
         GroupedKey, GroupedKVsAcc, GroupedRedsAcc, KeyGroupFun, Fun, Acc) ->
     {Grouped0, Ungrouped0} = lists:splitwith(fun({Key,_}) ->
         KeyGroupFun(GroupedKey, Key) end, NodeList),
@@ -587,7 +594,7 @@ reduce_stream_kp_node2(Bt, Dir, NodeList, KeyStart, KeyEnd,
         [FirstGrouped | RestGrouped] = lists:reverse(Grouped0),
         {RestGrouped, [FirstGrouped | Ungrouped0]}
     end,
-    GroupedReds = [element(2, Node) || {_, Node} <- GroupedNodes],
+    GroupedReds = [get_red(Fd, element(2, Node)) || {_, Node} <- GroupedNodes],
     case UngroupedNodes of
     [{_Key, NodeInfo}|RestNodes] ->
         {ok, Acc2, GroupedRedsAcc2, GroupedKVsAcc2, GroupedKey2} =
@@ -626,8 +633,8 @@ stream_node(Bt, Reds, Node, InRange, Dir, Fun, Acc) ->
 
 stream_kp_node(_Bt, _Reds, [], _InRange, _Dir, _Fun, Acc) ->
     {ok, Acc};
-stream_kp_node(Bt, Reds, [{_Key, Node} | Rest], InRange, Dir, Fun, Acc) ->
-    Red = element(2, Node),
+stream_kp_node(#btree{fd=Fd}=Bt, Reds, [{_Key, Node} | Rest], InRange, Dir, Fun, Acc) ->
+    Red = get_red(Fd, element(2, Node)),
     case stream_node(Bt, Reds, Node, InRange, Dir, Fun, Acc) of
     {ok, Acc2} ->
         stream_kp_node(Bt, [Red | Reds], Rest, InRange, Dir, Fun, Acc2);
@@ -637,15 +644,15 @@ stream_kp_node(Bt, Reds, [{_Key, Node} | Rest], InRange, Dir, Fun, Acc) ->
 
 drop_nodes(_Bt, Reds, _StartKey, []) ->
     {Reds, []};
-drop_nodes(Bt, Reds, StartKey, [{NodeKey, Node} | RestKPs]) ->
+drop_nodes(#btree{fd=Fd}=Bt, Reds, StartKey, [{NodeKey, Node} | RestKPs]) ->
     case less(Bt, NodeKey, StartKey) of
     true ->
-        drop_nodes(Bt, [element(2, Node) | Reds], StartKey, RestKPs);
+        drop_nodes(Bt, [get_red(Fd, element(2, Node)) | Reds], StartKey, RestKPs);
     false ->
         {Reds, [{NodeKey, Node} | RestKPs]}
     end.
 
-stream_kp_node(Bt, Reds, KPs, StartKey, InRange, Dir, Fun, Acc) ->
+stream_kp_node(#btree{fd=Fd}=Bt, Reds, KPs, StartKey, InRange, Dir, Fun, Acc) ->
     {NewReds, NodesToStream} =
     case Dir of
     fwd ->
@@ -659,7 +666,7 @@ stream_kp_node(Bt, Reds, KPs, StartKey, InRange, Dir, Fun, Acc) ->
             % everything sorts before it
             {Reds, KPs};
         {RevBefore, [FirstAfter | Drop]} ->
-            {[element(2, Node) || {_K, Node} <- Drop] ++ Reds,
+            {[get_red(Fd, element(2, Node)) || {_K, Node} <- Drop] ++ Reds,
                  [FirstAfter | lists:reverse(RevBefore)]}
         end
     end,
@@ -669,7 +676,7 @@ stream_kp_node(Bt, Reds, KPs, StartKey, InRange, Dir, Fun, Acc) ->
     [{_Key, Node} | Rest] ->
         case stream_node(Bt, NewReds, Node, StartKey, InRange, Dir, Fun, Acc) of
         {ok, Acc2} ->
-            Red = element(2, Node),
+            Red = get_red(Fd, element(2, Node)),
             stream_kp_node(Bt, [Red | NewReds], Rest, InRange, Dir, Fun, Acc2);
         {stop, LastReds, Acc2} ->
             {stop, LastReds, Acc2}
