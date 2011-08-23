@@ -533,7 +533,7 @@ couchTests.changes = function(debug) {
 
   options = {
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({"_rev":"1-cc609831f0ca66e8cd3d4c1e0d98108a", "a":123})
+      body: JSON.stringify({"_rev":"1-cc609831f0ca66e8cd3d4c1e0d98108a", "a":456})
   };
   req = CouchDB.request("PUT", "/" + db.name + "/foo?new_edits=false", options);
 
