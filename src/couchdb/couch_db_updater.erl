@@ -366,26 +366,34 @@ btree_by_id_join(Id, {HighSeq, Deleted, DiskTree}) ->
 
 btree_by_id_reduce(reduce, FullDocInfos) ->
     lists:foldl(
-        fun(Info, {NotDeleted, Deleted, Size}) ->
+        fun(Info, {NotDeleted, Deleted, Conflicts, Size}) ->
             Size2 = sum_leaf_sizes(Size, Info#full_doc_info.leafs_size),
+            Conflicts2 = Conflicts +
+                case has_conflicts(Info#full_doc_info.rev_tree) of
+                true -> 1;
+                false -> 0
+                end,
             case Info#full_doc_info.deleted of
             true ->
-                {NotDeleted, Deleted + 1, Size2};
+                {NotDeleted, Deleted + 1, Conflicts2, Size2};
             false ->
-                {NotDeleted + 1, Deleted, Size2}
+                {NotDeleted + 1, Deleted, Conflicts2, Size2}
             end
         end,
-        {0, 0, 0}, FullDocInfos);
-btree_by_id_reduce(rereduce, Reds) ->
+        {0, 0, 0, 0}, FullDocInfos);
+btree_by_id_reduce(rereduce, [FirstRed | RestReds]) ->
     lists:foldl(
-        fun({NotDeleted, Deleted}, {AccNotDeleted, AccDeleted, _AccSize}) ->
+        fun({NotDeleted, Deleted}, {AccNotDeleted, AccDeleted, _AccConflicts, _AccSize}) ->
             % pre 1.2 format, will be upgraded on compaction
-            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, nil};
-        ({NotDeleted, Deleted, Size}, {AccNotDeleted, AccDeleted, AccSize}) ->
+            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, 0, nil};
+        ({NotDeleted, Deleted, Size}, {AccNotDeleted, AccDeleted, AccConflicts, AccSize}) ->
             AccSize2 = sum_leaf_sizes(AccSize, Size),
-            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, AccSize2}
+            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, AccConflicts, AccSize2};
+        ({NotDeleted, Deleted, Conflicts, Size}, {AccNotDeleted, AccDeleted, AccConflicts, AccSize}) ->
+            AccSize2 = sum_leaf_sizes(AccSize, Size),
+            {AccNotDeleted + NotDeleted, AccDeleted + Deleted, Conflicts + AccConflicts, AccSize2}
         end,
-        {0, 0, 0}, Reds).
+        FirstRed, RestReds).
 
 sum_leaf_sizes(nil, _) ->
     nil;
@@ -494,6 +502,8 @@ open_reader_fd(Filepath, Options) ->
 close_db(#db{fd_ref_counter = RefCntr}) ->
     couch_ref_counter:drop(RefCntr).
 
+has_conflicts(RevTree) ->
+    couch_key_tree:has_conflicts(RevTree).
 
 refresh_validate_doc_funs(Db) ->
     {ok, DesignDocs} = couch_db:get_design_docs(Db),

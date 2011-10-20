@@ -266,25 +266,33 @@ get_db_info(Db) ->
         local_docs_btree = LocalBtree
     } = Db,
     {ok, Size} = couch_file:bytes(Fd),
-    {ok, DbReduction} = couch_btree:full_reduce(by_id_btree(Db)),
+    {Count, DelCount, ConflictCount, DocAndAttsSize} =
+        case couch_btree:full_reduce(by_id_btree(Db)) of
+        {ok, {Cnt,DelCnt}} ->
+            {Cnt,DelCnt,0,nil};
+        {ok, {Cnt1,DelCnt1,DSize1}} when DSize1 =:= nil ->
+            {Cnt1,DelCnt1,0,DSize1};
+        {ok, {Cnt2,DelCnt2,DSize2}} ->
+            {Cnt2,DelCnt2,0,DSize2};
+        {ok, {Cnt3,DelCnt3,Con,DSize3}} ->
+            {Cnt3,DelCnt3,Con,DSize3}
+        end,
     InfoList = [
         {db_name, Name},
-        {doc_count, element(1, DbReduction)},
-        {doc_del_count, element(2, DbReduction)},
+        {doc_count, Count},
+        {doc_del_count, DelCount},
+        {conflict_count, ConflictCount},
         {update_seq, SeqNum},
         {purge_seq, couch_db:get_purge_seq(Db)},
         {compact_running, Compactor/=nil},
         {disk_size, Size},
-        {data_size, db_data_size(DbReduction, [SeqBtree, IdBtree, LocalBtree])},
+        {data_size, db_data_size({Count, DelCount, DocAndAttsSize}, [SeqBtree, IdBtree, LocalBtree])},
         {instance_start_time, StartTime},
         {disk_format_version, DiskVersion},
         {committed_update_seq, CommittedUpdateSeq}
         ],
     {ok, InfoList}.
 
-db_data_size({_Count, _DelCount}, _Trees) ->
-    % pre 1.2 format, upgraded on compaction
-    null;
 db_data_size({_Count, _DelCount, nil}, _Trees) ->
     null;
 db_data_size({_Count, _DelCount, DocAndAttsSize}, Trees) ->

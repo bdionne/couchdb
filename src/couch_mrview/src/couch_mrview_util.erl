@@ -258,8 +258,8 @@ get_row_count(#mrview{btree=Bt}) ->
 
 all_docs_reduce_to_count(Reductions) ->
     Reduce = fun couch_db_updater:btree_by_id_reduce/2,
-    {Count, _, _} = couch_btree:final_reduce(Reduce, Reductions),
-    Count.
+    Reduction = couch_btree:final_reduce(Reduce, Reductions),
+    element(1, Reduction).
 
 
 reduce_to_count(Reductions) ->
