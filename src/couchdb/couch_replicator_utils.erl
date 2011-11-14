@@ -59,6 +59,11 @@ replication_id(#rep{options = Options} = Rep) ->
 % If a change is made to how replications are identified,
 % please add a new clause and increase ?REP_ID_VERSION.
 
+replication_id(#rep{source = Src, target = Tgt} = Rep, 3) ->
+    NewSrc = extract_pwd(Src),
+    NewTgt = extract_pwd(Tgt),
+    replication_id(Rep#rep{source = NewSrc, target = NewTgt}, 2);
+
 replication_id(#rep{user_ctx = UserCtx} = Rep, 2) ->
     {ok, HostName} = inet:gethostname(),
     Port = case (catch mochiweb_socket_server:get(couch_httpd, port)) of
@@ -82,6 +87,11 @@ replication_id(#rep{user_ctx = UserCtx} = Rep, 1) ->
     Tgt = get_rep_endpoint(UserCtx, Rep#rep.target),
     maybe_append_filters([HostName, Src, Tgt], Rep).
 
+extract_pwd(#httpdb{url = Url} = Db) ->
+    Db#httpdb{url = couch_util:url_strip_password(Url)};
+
+extract_pwd(Db) ->
+    Db.
 
 maybe_append_filters(Base,
         #rep{source = Source, user_ctx = UserCtx, options = Options}) ->
