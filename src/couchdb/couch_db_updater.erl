@@ -224,8 +224,9 @@ handle_info({update_docs, Client, GroupedDocs, NonRepDocs, MergeConflicts,
         FullCommit}, Db) ->
     GroupedDocs2 = [[{Client, D} || D <- DocGroup] || DocGroup <- GroupedDocs],
     if NonRepDocs == [] ->
+        UpperBound = list_to_integer(couch_config:get("couchdb","group_commits_size","0")),
         {GroupedDocs3, Clients, FullCommit2} = collect_updates(GroupedDocs2,
-                [Client], MergeConflicts, FullCommit);
+                [Client], MergeConflicts, FullCommit, UpperBound);
     true ->
         GroupedDocs3 = GroupedDocs2,
         FullCommit2 = FullCommit,
@@ -284,30 +285,26 @@ merge_updates([[{_, {#doc{id=IdA}, _}}|_]=GroupA | RestA],
         merge_updates([GroupA | RestA], RestB, [GroupB | AccOutGroups])
     end.
 
-collect_updates(GroupedDocsAcc, ClientsAcc, MergeConflicts, FullCommit) ->
-    UpperBound = list_to_integer(couch_config:get("couchdb","group_commits_size","0")),
-    Continue = (UpperBound == 0) orelse
-        ((UpperBound > 0) andalso (length(GroupedDocsAcc) < UpperBound)),
-    if Continue ->
-        receive
-        % Only collect updates with the same MergeConflicts flag and without
-        % local docs. It's easier to just avoid multiple _local doc
-        % updaters than deal with their possible conflicts, and local docs
-        % writes are relatively rare. Can be optmized later if really needed.
-        {update_docs, Client, GroupedDocs, [], MergeConflicts, FullCommit2} ->
-            GroupedDocs2 = [[{Client, Doc} || Doc <- DocGroup]
-                            || DocGroup <- GroupedDocs],
-            GroupedDocsAcc2 =
-                merge_updates(GroupedDocsAcc, GroupedDocs2, []),
-            collect_updates(GroupedDocsAcc2, [Client | ClientsAcc],
-                            MergeConflicts, (FullCommit or FullCommit2))
-        after 0 ->
-            {GroupedDocsAcc, ClientsAcc, FullCommit}
-        end;
-        true ->
+collect_updates(GroupedDocsAcc, ClientsAcc, MergeConflicts, FullCommit, Bound)
+    when (Bound == 0) orelse
+         ((Bound > 0) andalso (length(GroupedDocsAcc) < Bound)) ->
+    receive
+    % Only collect updates with the same MergeConflicts flag and without
+    % local docs. It's easier to just avoid multiple _local doc
+    % updaters than deal with their possible conflicts, and local docs
+    % writes are relatively rare. Can be optmized later if really needed.
+    {update_docs, Client, GroupedDocs, [], MergeConflicts, FullCommit2} ->
+        GroupedDocs2 = [[{Client, Doc} || Doc <- DocGroup]
+                        || DocGroup <- GroupedDocs],
+        GroupedDocsAcc2 =
+            merge_updates(GroupedDocsAcc, GroupedDocs2, []),
+        collect_updates(GroupedDocsAcc2, [Client | ClientsAcc],
+                        MergeConflicts, (FullCommit or FullCommit2), Bound)
+    after 0 ->
         {GroupedDocsAcc, ClientsAcc, FullCommit}
-    end.
-
+    end;
+collect_updates(GroupedDocsAcc, ClientsAcc, _MergeConflicts, FullCommit, _Bound) ->
+    {GroupedDocsAcc, ClientsAcc, FullCommit}.
 
 btree_by_seq_split(#doc_info{id=Id, high_seq=KeySeq, revs=Revs}) ->
     {RevInfos, DeletedRevInfos} = lists:foldl(
