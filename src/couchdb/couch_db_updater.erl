@@ -285,19 +285,26 @@ merge_updates([[{_, {#doc{id=IdA}, _}}|_]=GroupA | RestA],
     end.
 
 collect_updates(GroupedDocsAcc, ClientsAcc, MergeConflicts, FullCommit) ->
-    receive
+    UpperBound = list_to_integer(couch_config:get("couchdb","group_commits_size","0")),
+    Continue = (UpperBound == 0) orelse
+        ((UpperBound > 0) andalso (length(GroupedDocsAcc) < UpperBound)),
+    if Continue ->
+        receive
         % Only collect updates with the same MergeConflicts flag and without
         % local docs. It's easier to just avoid multiple _local doc
         % updaters than deal with their possible conflicts, and local docs
         % writes are relatively rare. Can be optmized later if really needed.
         {update_docs, Client, GroupedDocs, [], MergeConflicts, FullCommit2} ->
             GroupedDocs2 = [[{Client, Doc} || Doc <- DocGroup]
-                    || DocGroup <- GroupedDocs],
+                            || DocGroup <- GroupedDocs],
             GroupedDocsAcc2 =
                 merge_updates(GroupedDocsAcc, GroupedDocs2, []),
             collect_updates(GroupedDocsAcc2, [Client | ClientsAcc],
-                    MergeConflicts, (FullCommit or FullCommit2))
-    after 0 ->
+                            MergeConflicts, (FullCommit or FullCommit2))
+        after 0 ->
+            {GroupedDocsAcc, ClientsAcc, FullCommit}
+        end;
+        true ->
         {GroupedDocsAcc, ClientsAcc, FullCommit}
     end.
 
