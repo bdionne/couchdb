@@ -22,6 +22,9 @@ seq_alg_config() ->
 utc_alg_config() ->
     test_util:source_file("test/etap/041-uuid-gen-utc.ini").
 
+machine_id_config() ->
+    test_util:source_file("test/etap/041-uuid-gen-machine-id.ini").
+
 % Run tests and wait for the gen_servers to shutdown
 run_test(IniFiles, Test) ->
     {ok, Pid} = couch_config:start_link(IniFiles),
@@ -40,7 +43,7 @@ run_test(IniFiles, Test) ->
 main(_) ->
     test_util:init_code_path(),
     application:start(crypto),
-    etap:plan(6),
+    etap:plan(8),
 
     case (catch test()) of
         ok ->
@@ -63,6 +66,7 @@ test() ->
     run_test([default_config()], TestUnique),
     run_test([default_config(), seq_alg_config()], TestUnique),
     run_test([default_config(), utc_alg_config()], TestUnique),
+    run_test([default_config(), machine_id_config()], TestUnique),
 
     TestMonotonic = fun () ->
         etap:is(
@@ -73,6 +77,7 @@ test() ->
     end,
     run_test([default_config(), seq_alg_config()], TestMonotonic),
     run_test([default_config(), utc_alg_config()], TestMonotonic),
+    run_test([default_config(), machine_id_config()], TestMonotonic),
 
     % Pretty sure that the average of a uniform distribution is the
     % midpoint of the range. Thus, to exceed a threshold, we need
