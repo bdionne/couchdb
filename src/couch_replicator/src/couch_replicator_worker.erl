@@ -42,7 +42,6 @@
 ]).
 -import(couch_util, [
     to_binary/1,
-    get_value/2,
     get_value/3
 ]).
 
