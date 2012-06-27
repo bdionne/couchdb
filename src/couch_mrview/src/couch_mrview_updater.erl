@@ -42,7 +42,7 @@ start_update(Partial, State, NumChanges) ->
             {total_changes, NumChanges}
         ]),
         couch_task_status:set_update_frequency(500),
-        map_docs(Self, InitState)
+        map_docs(InitState)
     end,
     WriteFun = fun() -> write_results(Self, InitState) end,
 
@@ -124,7 +124,7 @@ finish_update(#mrst{doc_acc=Acc}=State) ->
     end.
 
 
-map_docs(Parent, State0) ->
+map_docs(State0) ->
     case couch_work_queue:dequeue(State0#mrst.doc_queue) of
         closed ->
             couch_query_servers:stop_doc_map(State0#mrst.qserver),
@@ -136,7 +136,7 @@ map_docs(Parent, State0) ->
             end,
             {ok, MapResults} = compute_map_results(State1, Dequeued),
             couch_work_queue:queue(State1#mrst.write_queue, MapResults),
-            map_docs(Parent, State1)
+            map_docs(State1)
     end.
 
 
